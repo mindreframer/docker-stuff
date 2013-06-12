@@ -1,0 +1,92 @@
+#!/bin/sh
+set -e
+
+_dl_error () {
+    echo "error: $*" >/dev/stderr
+    exit 1
+}
+
+_dl_warning () {
+    echo "warning: $*" >/dev/stderr
+}
+
+_dl_info () {
+    echo "info: $*" >/dev/stderr
+}
+
+_dl_resolve () {
+    CLASS=$1
+    NEEDLE=$2
+    cd $DOCKERLITE_ROOT/$CLASS
+    # Check exact match first
+    [ -d $NEEDLE/rootfs ] && { echo $NEEDLE ; return ; }
+    # Check prefix match on the ID
+    FOUND=""
+    for DIR in $NEEDLE*
+    do
+	[ -d $DIR/rootfs ] && FOUND=1$FOUND
+    done
+    case "$FOUND" in 
+	1)
+	    echo $DIR
+	    return
+	    ;;
+	1*)
+	    _dl_error "more than one match for $NEEDLE found in $CLASS"
+	    ;;
+    esac
+    # Check names
+    # (if no container has a name tag, grep will show a warning,
+    # so we send that to /dev/null)
+    grep -q "^$NEEDLE$" */metadata/name 2>/dev/null && {
+	ls -t $(grep -l "^$NEEDLE$" */metadata/name) | head -n 1 | cut -d/ -f1
+	return
+    }
+    # Check if we asked LAST
+    [ "$2" = "LAST" ] && {
+	ls -t | head -n 1
+	return
+    }
+    _dl_error "no match for $NEEDLE found in $CLASS"
+}
+
+_dl_mkid () { head -c 20 /dev/urandom | sha1sum | cut -d" " -f1 ; }
+_dl_zerohash () { sha1sum /dev/null | cut -d" " -f1 ; }
+_dl_cgroup () {
+    CID=$1
+    NONFATAL=$2
+    MNT=$(grep ^cgroup.*devices /proc/mounts | cut -d" " -f2 | head -n1)
+    [ "$MNT" ] || _dl_error "cannot find cgroup mount point"
+    [ -d $MNT/lxc/$CID ] && { echo $MNT/lxc/$CID ; return ; }
+    [ -d $MNT/$CID ] && { echo $MNT/$CID ; return ; }
+    [ "$NONFATAL" ] || _dl_error "cannot find cgroup for container $CID"
+}
+eval "_dl_sourcedir () { echo $(readlink -f $(dirname "$0")); }"
+
+_dl_btrfs () {
+    btrfs "$@" >/dev/null || _dl_error "problem with btrfs"
+}
+
+HELP="dockerlite - a modular containerization engine"
+_dl_cmd () {
+    HELP="$(printf "%s\n%-10s %s\n\n" "$HELP" "$1" "$2")"
+}
+
+cd $(_dl_sourcedir)
+. ./dockerlite.conf
+for CMD in lib/dockerlite-*.sh
+do
+    . ./$CMD
+done
+
+[ "$DOCKERLITE_DEBUG" ] && set -x
+if [ "$1" ]
+then
+	CMD="$1"
+	shift
+else
+	CMD=help
+fi
+FUN=_dl_$CMD
+type -t $FUN | grep -q function || _dl_error "invalid command"
+$FUN "$@"
