@@ -32,7 +32,7 @@ def add_remote(git_url)
 end
 
 def add_project(git_url)
-ensure_folder_exists(git_url)
+  ensure_folder_exists(git_url)
   cmd =  "git subtree add --prefix=#{name(git_url)} --squash #{git_url} master"
   execute(cmd)
 end
