@@ -22,10 +22,6 @@ def remote_name(git_url)
 end
 
 def name(git_url)
-  # owner = (git_url.split("/")[-2])
-  # repo = git_url.split("/").last[0..-5]
-  # owner, repo = [owner, repo].map{|x| x.downcase}
-  # "#{owner}__#{repo}"
   path = git_url.split("//").last
   path = path.gsub(/\.git$/, "")
 end
