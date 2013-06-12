@@ -2,20 +2,7 @@
 ##### inspired by:
 ## http://code.dimilow.com/git-subtree-notes-and-workflows/
 
-PROJECTS = %w(
-https://github.com/crosbymichael/dockerui.git
-https://github.com/dotcloud/docker.git
-https://github.com/dotcloud/docker-registry.git
-https://github.com/dotcloud/dockerlite.git
-https://github.com/dotcloud/openstack-docker.git
-https://github.com/dreid/docker-cookbook.git
-https://github.com/fsouza/go-dockerclient.git
-https://github.com/globocom/docker-cluster.git
-https://github.com/globocom/tsuru.git
-https://github.com/progrium/buildstep.git
-https://github.com/progrium/dokku.git
-https://github.com/portertech/kitchen-docker.git
-).sort_by{|x| x.downcase}
+PROJECTS = File.read("projects.txt").split("\n").sort_by{|x| x.downcase}
 
 def remote_name(git_url)
   "remote_#{git_url.split("/").last[0..-5]}"
