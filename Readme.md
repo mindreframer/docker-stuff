@@ -20,6 +20,7 @@
 
 
 Articles:
+  - [Deploy Java Apps With Docker = Awesome, 2013.06](http://blogs.atlassian.com/2013/06/deploy-java-apps-with-docker-awesome/)
   - [Unionize: network superpowers for your docker containers](https://gist.github.com/jpetazzo/5493295) - http://blog.docker.io/2013/04/unionize-network-superpowers-for-your-docker-containers/
   - http://www.activestate.com/blog/2013/06/solomon-hykes-explains-docker
   - http://kencochrane.net/blog/2013/06/running-docker-on-digital-ocean/
