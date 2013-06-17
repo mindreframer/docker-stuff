@@ -7,6 +7,7 @@ package cluster
 import (
 	"github.com/dotcloud/docker"
 	dcli "github.com/fsouza/go-dockerclient"
+	"net/http"
 	"sync"
 )
 
@@ -43,7 +44,7 @@ func (c *Cluster) KillContainer(id string) error {
 
 // ListContainers returns a slice of all containers in the cluster matching the
 // given criteria.
-func (c *Cluster) ListContainers(opts *dcli.ListContainersOptions) ([]docker.APIContainers, error) {
+func (c *Cluster) ListContainers(opts dcli.ListContainersOptions) ([]docker.APIContainers, error) {
 	c.mut.RLock()
 	defer c.mut.RUnlock()
 	var wg sync.WaitGroup
@@ -116,6 +117,22 @@ func (c *Cluster) WaitContainer(id string) (int, error) {
 	return exit.(int), err
 }
 
+// AttachToContainer attaches to a container, using the given options.
+func (c *Cluster) AttachToContainer(opts dcli.AttachToContainerOptions) error {
+	_, err := c.runOnNodes(func(n node) (interface{}, error) {
+		return nil, n.AttachToContainer(opts)
+	})
+	return err
+}
+
+// CommitContainer commits a container and returns the image id.
+func (c *Cluster) CommitContainer(opts dcli.CommitContainerOptions) (*docker.Image, error) {
+	image, err := c.runOnNodes(func(n node) (interface{}, error) {
+		return n.CommitContainer(opts)
+	})
+	return image.(*docker.Image), err
+}
+
 type containerFunc func(node) (interface{}, error)
 
 func (c *Cluster) runOnNodes(fn containerFunc) (interface{}, error) {
@@ -132,6 +149,8 @@ func (c *Cluster) runOnNodes(fn containerFunc) (interface{}, error) {
 			value, err := fn(n)
 			if err == nil {
 				result <- value
+			} else if e, ok := err.(*dcli.Error); ok && e.Status == http.StatusNotFound {
+				result <- nil
 			} else if err != dcli.ErrNoSuchContainer {
 				errChan <- err
 			}
