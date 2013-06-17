@@ -1,0 +1,21 @@
+table.table.table-striped
+  tr
+    th Id
+    td= container.id
+  tr
+    th Image
+    td
+      a href="/images/#{container.image}"= container.image
+  tr
+    th
+      nobr Created At
+    td= container.created_at.utc.iso8601(6)
+  tr
+    th Env
+    td= container.env
+  tr
+    th Inspect
+    td= container.inspect
+  tr
+    th IP Address
+    td= container.network_settings.keys

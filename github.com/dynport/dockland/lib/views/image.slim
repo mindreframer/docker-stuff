@@ -1,0 +1,48 @@
+h3= "Image #{image.id}"
+table.table.table-stripped
+  tr
+    th Short ID
+    td
+      input type="text" onclick="select()" tabindex="1" value=image.short_id 
+  tr
+    th
+      nobr Created
+    td= image.created_at.utc.iso8601(3)
+  - if image.container
+    tr
+      th Container
+      td= image.container
+  - if image.parent
+    tr
+      th Parent
+      td
+        a tabindex="2" href="/images/#{image.parent}"= image.parent
+  tr
+    th Env
+    td
+      table
+        - image.env.sort.each do |k, v|
+          tr
+            th= k
+            td= v
+
+.actions
+  form method="POST" action="/images/#{image.id}"
+    input name="_method" type="hidden" value="delete"
+    input type="submit" value="DELETE"
+
+h2 History
+table.table.table-striped
+  - history.run_list.reverse.each do |item|
+    tr
+      td
+        == link_to_image item
+      td
+        nobr= item.created_at.utc.iso8601
+      td= item.created_by
+
+h2 Raw
+
+code
+  pre
+    = MultiJson.dump(image.attributes, pretty: true)
