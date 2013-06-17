@@ -9,7 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/dotcloud/docker"
+	"io"
 	"net/http"
+	"os"
 )
 
 // Error returned when the container does not exist.
@@ -28,7 +30,7 @@ type ListContainersOptions struct {
 // ListContainers returns a slice of containers matching the given criteria.
 //
 // See http://goo.gl/8IMr2 for more details.
-func (c *Client) ListContainers(opts *ListContainersOptions) ([]docker.APIContainers, error) {
+func (c *Client) ListContainers(opts ListContainersOptions) ([]docker.APIContainers, error) {
 	path := "/containers/ps?" + queryString(opts)
 	body, _, err := c.do("GET", path, nil)
 	if err != nil {
@@ -193,7 +195,7 @@ type CommitContainerOptions struct {
 // CommitContainer creates a new image from a container's changes.
 //
 // See http://goo.gl/qYrAF for more details.
-func (c *Client) CommitContainer(opts *CommitContainerOptions) (*docker.Image, error) {
+func (c *Client) CommitContainer(opts CommitContainerOptions) (*docker.Image, error) {
 	path := "/commit?" + queryString(opts)
 	body, status, err := c.do("POST", path, nil)
 	if status == http.StatusNotFound {
@@ -208,4 +210,55 @@ func (c *Client) CommitContainer(opts *CommitContainerOptions) (*docker.Image, e
 		return nil, err
 	}
 	return &image, nil
+}
+
+// AttachToContainerOptions is the set of options that can be used when
+// attaching to a container.
+//
+// See http://goo.gl/APgKE for more details.
+type AttachToContainerOptions struct {
+	Container    string
+	InputFile    *os.File
+	OutputStream io.Writer
+	ErrorStream  io.Writer
+	RawTerminal  bool
+
+	// Get container logs, sending it to OutputStream.
+	Logs bool
+
+	// Stream the response?
+	Stream bool
+
+	// Attach to stdin, and use InputFile.
+	Stdin bool
+
+	// Attach to stdout, and use OutputStream.
+	Stdout bool
+
+	// Attach to stderr, and use ErrorStream.
+	Stderr bool
+}
+
+// AttachToContainer attaches to a container, using the given options.
+//
+// See http://goo.gl/APgKE for more details.
+func (c *Client) AttachToContainer(opts AttachToContainerOptions) error {
+	container := opts.Container
+	if container == "" {
+		return ErrNoSuchContainer
+	}
+	stdout := opts.OutputStream
+	stderr := opts.ErrorStream
+	stdin := opts.InputFile
+	raw := opts.RawTerminal
+	opts.Container = ""
+	opts.InputFile = nil
+	opts.OutputStream = nil
+	opts.ErrorStream = nil
+	opts.RawTerminal = false
+	path := "/containers/" + container + "/attach?" + queryString(opts)
+	if opts.Logs {
+		return c.stream("POST", path, nil, stdout)
+	}
+	return c.hijack("POST", path, raw, stdin, stderr, stdout)
 }

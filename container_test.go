@@ -5,10 +5,13 @@
 package docker
 
 import (
+	"bytes"
 	"encoding/json"
 	"github.com/dotcloud/docker"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"os"
 	"reflect"
 	"testing"
 )
@@ -55,7 +58,7 @@ func TestListContainers(t *testing.T) {
 			Transport: &FakeRoundTripper{message: jsonContainers, status: http.StatusOK},
 		},
 	}
-	containers, err := client.ListContainers(nil)
+	containers, err := client.ListContainers(ListContainersOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,14 +69,14 @@ func TestListContainers(t *testing.T) {
 
 func TestListContainersParams(t *testing.T) {
 	var tests = []struct {
-		input  *ListContainersOptions
+		input  ListContainersOptions
 		params map[string][]string
 	}{
-		{nil, map[string][]string{}},
-		{&ListContainersOptions{All: true}, map[string][]string{"all": {"1"}}},
-		{&ListContainersOptions{All: true, Limit: 10}, map[string][]string{"all": {"1"}, "limit": {"10"}}},
+		{ListContainersOptions{}, map[string][]string{}},
+		{ListContainersOptions{All: true}, map[string][]string{"all": {"1"}}},
+		{ListContainersOptions{All: true, Limit: 10}, map[string][]string{"all": {"1"}, "limit": {"10"}}},
 		{
-			&ListContainersOptions{All: true, Limit: 10, Since: "adf9983", Before: "abdeef"},
+			ListContainersOptions{All: true, Limit: 10, Since: "adf9983", Before: "abdeef"},
 			map[string][]string{"all": {"1"}, "limit": {"10"}, "since": {"adf9983"}, "before": {"abdeef"}},
 		},
 	}
@@ -116,9 +119,9 @@ func TestListContainersFailure(t *testing.T) {
 				Transport: &FakeRoundTripper{message: tt.message, status: tt.status},
 			},
 		}
-		expected := apiClientError{status: tt.status, message: tt.message}
-		containers, err := client.ListContainers(nil)
-		if !reflect.DeepEqual(expected, *err.(*apiClientError)) {
+		expected := Error{Status: tt.status, Message: tt.message}
+		containers, err := client.ListContainers(ListContainersOptions{})
+		if !reflect.DeepEqual(expected, *err.(*Error)) {
 			t.Errorf("Wrong error in ListContainers. Want %#v. Got %#v.", expected, err)
 		}
 		if len(containers) > 0 {
@@ -204,12 +207,12 @@ func TestInspectContainerFailure(t *testing.T) {
 			Transport: &FakeRoundTripper{message: "server error", status: 500},
 		},
 	}
-	expected := apiClientError{status: 500, message: "server error"}
+	expected := Error{Status: 500, Message: "server error"}
 	container, err := client.InspectContainer("abe033")
 	if container != nil {
 		t.Errorf("InspectContainer: Expected <nil> container, got %#v", container)
 	}
-	if !reflect.DeepEqual(expected, *err.(*apiClientError)) {
+	if !reflect.DeepEqual(expected, *err.(*Error)) {
 		t.Errorf("InspectContainer: Wrong error information. Want %#v. Got %#v.", expected, err)
 	}
 }
@@ -502,7 +505,7 @@ func TestCommitContainer(t *testing.T) {
 		},
 	}
 	id := "596069db4bf5"
-	image, err := client.CommitContainer(nil)
+	image, err := client.CommitContainer(CommitContainerOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -515,17 +518,17 @@ func TestCommitContainerParams(t *testing.T) {
 	cfg := docker.Config{Memory: 67108864}
 	b, _ := json.Marshal(&cfg)
 	var tests = []struct {
-		input  *CommitContainerOptions
+		input  CommitContainerOptions
 		params map[string][]string
 	}{
-		{nil, map[string][]string{}},
-		{&CommitContainerOptions{Container: "44c004db4b17"}, map[string][]string{"container": {"44c004db4b17"}}},
+		{CommitContainerOptions{}, map[string][]string{}},
+		{CommitContainerOptions{Container: "44c004db4b17"}, map[string][]string{"container": {"44c004db4b17"}}},
 		{
-			&CommitContainerOptions{Container: "44c004db4b17", Repository: "tsuru/python", Message: "something"},
+			CommitContainerOptions{Container: "44c004db4b17", Repository: "tsuru/python", Message: "something"},
 			map[string][]string{"container": {"44c004db4b17"}, "repo": {"tsuru/python"}, "m": {"something"}},
 		},
 		{
-			&CommitContainerOptions{Container: "44c004db4b17", Run: &cfg},
+			CommitContainerOptions{Container: "44c004db4b17", Run: &cfg},
 			map[string][]string{"container": {"44c004db4b17"}, "run": {string(b)}},
 		},
 	}
@@ -560,7 +563,7 @@ func TestCommitContainerFailure(t *testing.T) {
 			Transport: &FakeRoundTripper{message: "no such container", status: http.StatusInternalServerError},
 		},
 	}
-	_, err := client.CommitContainer(nil)
+	_, err := client.CommitContainer(CommitContainerOptions{})
 	if err == nil {
 		t.Error("Expected non-nil error, got <nil>.")
 	}
@@ -573,8 +576,99 @@ func TestCommitContainerNotFound(t *testing.T) {
 			Transport: &FakeRoundTripper{message: "no such container", status: http.StatusNotFound},
 		},
 	}
-	_, err := client.CommitContainer(nil)
+	_, err := client.CommitContainer(CommitContainerOptions{})
 	if !reflect.DeepEqual(err, ErrNoSuchContainer) {
 		t.Errorf("CommitContainer: Wrong error returned. Want %#v. Got %#v.", ErrNoSuchContainer, err)
+	}
+}
+
+func TestAttachToContainerLogs(t *testing.T) {
+	fakeRT := FakeRoundTripper{message: "something happened", status: http.StatusOK}
+	client := Client{
+		endpoint: "http://localhost:4243",
+		client:   &http.Client{Transport: &fakeRT},
+	}
+	var buf bytes.Buffer
+	opts := AttachToContainerOptions{
+		Container:    "a123456",
+		OutputStream: &buf,
+		Stdout:       true,
+		Stderr:       true,
+		Logs:         true,
+	}
+	err := client.AttachToContainer(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := "something happened"
+	if buf.String() != expected {
+		t.Errorf("AttachToContainer for logs: wrong output. Want %q. Got %q.", expected, buf.String())
+	}
+	req := fakeRT.requests[0]
+	if req.Method != "POST" {
+		t.Errorf("AttachToContainer: wrong HTTP method. Want POST. Got %s.", req.Method)
+	}
+	u, _ := url.Parse(client.getURL("/containers/a123456/attach"))
+	if req.URL.Path != u.Path {
+		t.Errorf("AttachToContainer for logs: wrong HTTP path. Want %q. Got %q.", u.Path, req.URL.Path)
+	}
+	expectedQs := map[string][]string{
+		"logs":   {"1"},
+		"stdout": {"1"},
+		"stderr": {"1"},
+	}
+	got := map[string][]string(req.URL.Query())
+	if !reflect.DeepEqual(got, expectedQs) {
+		t.Errorf("AttachToContainer: wrong query string. Want %#v. Got %#v.", expectedQs, got)
+	}
+}
+
+func TestAttachToContainer(t *testing.T) {
+	file, err := os.OpenFile("/tmp/docker-temp-file.txt", os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	file.Write([]byte("send value"))
+	file.Seek(0, 0)
+	var req http.Request
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("something happened!"))
+		req = *r
+	}))
+	defer server.Close()
+	client, _ := NewClient(server.URL)
+	var stdout, stderr bytes.Buffer
+	opts := AttachToContainerOptions{
+		Container:    "a123456",
+		OutputStream: &stdout,
+		ErrorStream:  &stderr,
+		InputFile:    file,
+		Stdin:        true,
+		Stdout:       true,
+		Stderr:       true,
+		Stream:       true,
+	}
+	err = client.AttachToContainer(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := map[string][]string{
+		"stdin":  {"1"},
+		"stdout": {"1"},
+		"stderr": {"1"},
+		"stream": {"1"},
+	}
+	got := map[string][]string(req.URL.Query())
+	if !reflect.DeepEqual(got, expected) {
+		t.Errorf("AttachToContainer: wrong query string. Want %#v. Got %#v.", expected, got)
+	}
+}
+
+func TestAttachToContainerWithoutContainer(t *testing.T) {
+	var client Client
+	err := client.AttachToContainer(AttachToContainerOptions{})
+	if err != ErrNoSuchContainer {
+		t.Errorf("AttachToContainer: wrong error. Want %#v. Got %#v.", ErrNoSuchContainer, err)
 	}
 }

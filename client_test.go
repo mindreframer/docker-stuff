@@ -52,10 +52,10 @@ func TestGetURL(t *testing.T) {
 		path     string
 		expected string
 	}{
-		{"http://localhost:4243/", "/", fmt.Sprintf("http://localhost:4243/v%f/", apiVersion)},
-		{"http://localhost:4243", "/", fmt.Sprintf("http://localhost:4243/v%f/", apiVersion)},
-		{"http://localhost:4243", "/containers/ps", fmt.Sprintf("http://localhost:4243/v%f/containers/ps", apiVersion)},
-		{"http://localhost:4243/////", "/", fmt.Sprintf("http://localhost:4243/v%f/", apiVersion)},
+		{"http://localhost:4243/", "/", fmt.Sprintf("http://localhost:4243/%s/", apiVersion)},
+		{"http://localhost:4243", "/", fmt.Sprintf("http://localhost:4243/%s/", apiVersion)},
+		{"http://localhost:4243", "/containers/ps", fmt.Sprintf("http://localhost:4243/%s/containers/ps", apiVersion)},
+		{"http://localhost:4243/////", "/", fmt.Sprintf("http://localhost:4243/%s/", apiVersion)},
 	}
 	var client Client
 	for _, tt := range tests {
@@ -68,8 +68,8 @@ func TestGetURL(t *testing.T) {
 }
 
 func TestError(t *testing.T) {
-	err := newAPIClientError(400, []byte("bad parameter"))
-	expected := apiClientError{status: 400, message: "bad parameter"}
+	err := newError(400, []byte("bad parameter"))
+	expected := Error{Status: 400, Message: "bad parameter"}
 	if !reflect.DeepEqual(expected, *err) {
 		t.Errorf("Wrong error type. Want %#v. Got %#v.", expected, *err)
 	}
