@@ -4,6 +4,8 @@ https://github.com/dotcloud/docker-registry.git
 https://github.com/dotcloud/dockerlite.git
 https://github.com/dotcloud/openstack-docker.git
 https://github.com/dreid/docker-cookbook.git
+https://github.com/dynport/dockland.git
+https://github.com/ehazlett/shipyard.git
 https://github.com/fsouza/go-dockerclient.git
 https://github.com/globocom/docker-cluster.git
 https://github.com/globocom/tsuru.git
