@@ -12,6 +12,7 @@ import (
 	"github.com/globocom/tsuru/testing"
 	"launchpad.net/gocheck"
 	"os"
+	"strings"
 )
 
 func (s *S) TestDeployCmds(c *gocheck.C) {
@@ -25,7 +26,9 @@ func (s *S) TestDeployCmds(c *gocheck.C) {
 	appRepo := repository.ReadOnlyURL(app.GetName())
 	port, err := getPort()
 	c.Assert(err, gocheck.IsNil)
-	expected := []string{docker, "run", "-p", port, "-d", imageName, deployCmd, appRepo}
+	user, err := config.GetString("docker:ssh:user")
+	c.Assert(err, gocheck.IsNil)
+	expected := []string{docker, "run", "-p", port, "-u", user, "-d", imageName, deployCmd, appRepo}
 	cmds, err := deployCmds(app, version)
 	c.Assert(err, gocheck.IsNil)
 	c.Assert(cmds, gocheck.DeepEquals, expected)
@@ -39,7 +42,11 @@ func (s *S) TestRunCmds(c *gocheck.C) {
 	imageName := "imageId"
 	port, err := config.GetString("docker:run-cmd:port")
 	c.Assert(err, gocheck.IsNil)
-	expected := []string{docker, "run", "-d", "-t", "-p", port, imageName, "/bin/bash", "-c", runCmd, "&&", "/var/lib/tsuru/add-key key-content && /usr/sbin/sshd -D"}
+	ssh, err := sshCmds()
+	sshCmd := strings.Join(ssh, " && ")
+	c.Assert(err, gocheck.IsNil)
+	cmd := fmt.Sprintf("%s && %s", runCmd, sshCmd)
+	expected := []string{docker, "run", "-d", "-t", "-p", port, imageName, "/bin/bash", "-c", cmd}
 	cmds, err := runCmds(imageName)
 	c.Assert(err, gocheck.IsNil)
 	c.Assert(cmds, gocheck.DeepEquals, expected)

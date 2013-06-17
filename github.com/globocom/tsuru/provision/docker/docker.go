@@ -6,10 +6,11 @@ package docker
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
+	dclient "github.com/fsouza/go-dockerclient"
 	"github.com/globocom/config"
+	"github.com/globocom/docker-cluster/cluster"
 	"github.com/globocom/tsuru/fs"
 	"github.com/globocom/tsuru/log"
 	"github.com/globocom/tsuru/provision"
@@ -17,6 +18,14 @@ import (
 	"labix.org/v2/mgo/bson"
 	"strings"
 )
+
+var dockerCluster *cluster.Cluster
+
+func init() {
+	dockerCluster, _ = cluster.New(
+		cluster.Node{ID: "server", Address: "http://localhost:4243"},
+	)
+}
 
 var fsystem fs.Fs
 
@@ -32,7 +41,10 @@ func runCmd(cmd string, args ...string) (string, error) {
 	out := bytes.Buffer{}
 	err := executor().Execute(cmd, args, nil, &out, &out)
 	log.Printf("running the cmd: %s with the args: %s", cmd, args)
-	return out.String(), err
+	if err != nil {
+		return "", &cmdError{cmd: cmd, args: args, err: err, out: out.String()}
+	}
+	return out.String(), nil
 }
 
 func getPort() (string, error) {
@@ -77,55 +89,36 @@ func newContainer(app provision.App, commands []string) (*container, error) {
 	return &c, nil
 }
 
-func (c *container) inspect() (map[string]interface{}, error) {
-	docker, err := config.GetString("docker:binary")
-	if err != nil {
-		return nil, err
-	}
-	out, err := runCmd(docker, "inspect", c.ID)
-	if err != nil {
-		return nil, err
-	}
-	log.Printf("docker inspect output: %s", out)
-	var r map[string]interface{}
-	err = json.Unmarshal([]byte(out), &r)
-	if err != nil {
-		return nil, err
-	}
-	return r, nil
-}
-
 // hostPort returns the host port mapped for the container.
 func (c *container) hostPort() (string, error) {
 	if c.Port == "" {
 		return "", errors.New("Container does not contain any mapped port")
 	}
-	data, err := c.inspect()
+	dockerContainer, err := dockerCluster.InspectContainer(c.ID)
 	if err != nil {
 		return "", err
 	}
-	mappedPorts := data["NetworkSettings"].(map[string]interface{})["PortMapping"].(map[string]interface{})
-	if port, ok := mappedPorts[c.Port]; ok {
-		return port.(string), nil
+	if dockerContainer.NetworkSettings != nil {
+		mappedPorts := dockerContainer.NetworkSettings.PortMapping
+		if port, ok := mappedPorts[c.Port]; ok {
+			return port, nil
+		}
 	}
 	return "", fmt.Errorf("Container port %s is not mapped to any host port", c.Port)
 }
 
 // ip returns the ip for the container.
 func (c *container) ip() (string, error) {
-	result, err := c.inspect()
+	dockerContainer, err := dockerCluster.InspectContainer(c.ID)
 	if err != nil {
-		msg := fmt.Sprintf("error(%s) parsing json from docker when trying to get ipaddress", err)
-		log.Print(msg)
-		return "", errors.New(msg)
+		return "", err
 	}
-	if ns, ok := result["NetworkSettings"]; !ok || ns == nil {
+	if dockerContainer.NetworkSettings == nil {
 		msg := "Error when getting container information. NetworkSettings is missing."
 		log.Print(msg)
 		return "", errors.New(msg)
 	}
-	networkSettings := result["NetworkSettings"].(map[string]interface{})
-	instanceIP := networkSettings["IpAddress"].(string)
+	instanceIP := dockerContainer.NetworkSettings.IPAddress
 	if instanceIP == "" {
 		msg := "error: Can't get ipaddress..."
 		log.Print(msg)
@@ -202,6 +195,20 @@ func deploy(app provision.App, version string, w io.Writer) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	for {
+		result, err := c.stopped()
+		if err != nil {
+			return "", err
+		}
+		if result {
+			break
+		}
+	}
+	l, err := c.logs()
+	if err != nil {
+		return "", err
+	}
+	fmt.Fprint(w, l)
 	imageId, err := c.commit()
 	if err != nil {
 		return "", err
@@ -226,6 +233,10 @@ func start(app provision.App, imageId string, w io.Writer) (*container, error) {
 	if err != nil {
 		return nil, err
 	}
+	err = c.setStatus("running")
+	if err != nil {
+		return nil, err
+	}
 	return c, nil
 }
 
@@ -237,10 +248,9 @@ func (c *container) remove() error {
 	}
 	address := c.getAddress()
 	log.Printf("Removing container %s from docker", c.ID)
-	out, err := runCmd(docker, "rm", c.ID)
+	_, err = runCmd(docker, "rm", c.ID)
 	if err != nil {
-		log.Printf("Failed to remove container from docker: %s", err.Error())
-		log.Printf("Command output: %s", out)
+		log.Printf("Failed to remove container from docker: %s", err)
 		return err
 	}
 	runCmd("ssh-keygen", "-R", c.IP)
@@ -280,19 +290,36 @@ func (c *container) ssh(stdout, stderr io.Writer, cmd string, args ...string) er
 
 // commit commits an image in docker based in the container
 func (c *container) commit() (string, error) {
-	docker, err := config.GetString("docker:binary")
-	if err != nil {
-		log.Printf("Tsuru is misconfigured. docker:binary config is missing.")
-		return "", err
-	}
-	log.Printf("attempting to commit image from container %s", c.ID)
-	imageId, err := runCmd(docker, "commit", c.ID)
+	opts := dclient.CommitContainerOptions{Container: c.ID}
+	image, err := dockerCluster.CommitContainer(opts)
 	if err != nil {
 		log.Printf("Could not commit docker image: %s", err.Error())
 		return "", err
 	}
-	imageId = strings.Replace(imageId, "\n", "", -1)
-	return imageId, nil
+	return image.ID, nil
+}
+
+// stopped returns true if the container is stopped.
+func (c *container) stopped() (bool, error) {
+	dockerContainer, err := dockerCluster.InspectContainer(c.ID)
+	if err != nil {
+		return true, err
+	}
+	running := dockerContainer.State.Running
+	return !running, nil
+}
+
+// logs returns logs for the container.
+func (c *container) logs() (string, error) {
+	docker, err := binary()
+	if err != nil {
+		return "", err
+	}
+	result, err := runCmd(docker, "logs", c.ID)
+	if err != nil {
+		return "", err
+	}
+	return result, nil
 }
 
 func getContainer(id string) (*container, error) {
@@ -349,4 +376,16 @@ func removeImage(imageId string) error {
 		return err
 	}
 	return nil
+}
+
+type cmdError struct {
+	cmd  string
+	args []string
+	err  error
+	out  string
+}
+
+func (e *cmdError) Error() string {
+	command := e.cmd + " " + strings.Join(e.args, " ")
+	return fmt.Sprintf("Failed to run command %q (%s): %s.", command, e.err, e.out)
 }
