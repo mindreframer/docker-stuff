@@ -1,0 +1,16 @@
+a href="/images/graph" Image Tree
+
+table.table.table-stripped
+  tr
+    th Repository
+    th Tag
+    th Created At
+    th Inspect
+  - images.each do |image|
+    tr
+      td
+        a href="/images/#{image.short_id}"= image.short_id
+      td
+        = image.tags.join(", ")
+      td
+        nobr= image.created_at.iso8601

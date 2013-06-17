@@ -1,0 +1,39 @@
+#!/usr/bin/env ruby
+
+host = nil
+port = 9292
+interface = "0.0.0.0"
+
+require "optparse"
+OPTS = OptionParser.new do |o|
+  o.on("-h HOST", "docker host") do |value|
+    host = value
+  end
+
+  o.on("-p PORT", Integer, "port to bind to. default: #{port}") do |value|
+    port = value
+  end
+
+  o.on("-i INTERFACE", String, "interface to bind to. default: #{interface}") do |value|
+    interface = value
+  end
+end
+
+def abort_with(message)
+  puts "ERROR: #{message}"
+  abort OPTS.to_s
+end
+
+OPTS.parse(ARGV)
+
+abort_with "host must be set" if host.nil?
+
+out = `dot -V 2>&1`
+abort_with "graphviz not installed" unless out.include?("graphviz")
+abort_with "must at least run in ruby 1.9" if RUBY_VERSION.split(".")[0,2].join(".").to_f < 1.9
+
+ENV["DOCKER_HOST"] = host
+
+Dir.chdir(File.expand_path("../../", __FILE__)) do
+  exec "rackup -p #{port} -o #{interface}"
+end

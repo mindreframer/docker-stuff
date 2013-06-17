@@ -1,0 +1,11 @@
+h1 Containers
+
+table.table.table-stripped
+  - containers.each do |container|
+    tr
+      td
+        a href="/containers/#{container.id}"= container.short_id
+      td= container.created_at.utc.iso8601
+      td= container.ports
+      td= container.status
+      td= container.inspect
