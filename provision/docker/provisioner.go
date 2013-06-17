@@ -6,7 +6,6 @@ package docker
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/globocom/config"
@@ -108,7 +107,6 @@ func (p *dockerProvisioner) Deploy(a provision.App, version string, w io.Writer)
 	} else if _, err := start(a, imageId, w); err != nil {
 		return err
 	}
-	a.Restart(w)
 	app.Enqueue(queue.Message{
 		Action: app.RegenerateApprcAndStart,
 		Args:   []string{a.GetName()},
@@ -221,23 +219,17 @@ func (p *dockerProvisioner) CollectStatus() ([]provision.Unit, error) {
 	}
 	units := make(chan provision.Unit, len(containers))
 	result := buildResult(len(containers), units)
-	errs := make(chan error, len(containers))
 	for _, container := range containers {
 		containersGroup.Add(1)
-		go collectUnit(container, units, errs, &containersGroup)
+		go collectUnit(container, units, &containersGroup)
 	}
 	containersGroup.Wait()
-	close(errs)
 	close(units)
-	if err, ok := <-errs; ok {
-		return nil, err
-	}
 	return <-result, nil
 }
 
-func collectUnit(container container, units chan<- provision.Unit, errs chan<- error, wg *sync.WaitGroup) {
+func collectUnit(container container, units chan<- provision.Unit, wg *sync.WaitGroup) {
 	defer wg.Done()
-	docker, _ := config.GetString("docker:binary")
 	unit := provision.Unit{
 		Name:    container.ID,
 		AppName: container.AppName,
@@ -251,22 +243,16 @@ func collectUnit(container container, units chan<- provision.Unit, errs chan<- e
 	case "created":
 		return
 	}
-	out, err := runCmd(docker, "inspect", container.ID)
+	dockerContainer, err := dockerCluster.InspectContainer(container.ID)
 	if err != nil {
-		errs <- err
+		log.Printf("error on inspecting [container %s] for collect data", container.ID)
 		return
 	}
-	var c map[string]interface{}
-	err = json.Unmarshal([]byte(out), &c)
-	if err != nil {
-		errs <- err
-		return
-	}
-	unit.Ip = c["NetworkSettings"].(map[string]interface{})["IpAddress"].(string)
+	unit.Ip = dockerContainer.NetworkSettings.IPAddress
 	if hostPort, err := container.hostPort(); err == nil && hostPort != container.HostPort {
 		err = fixContainer(&container, unit.Ip, hostPort)
 		if err != nil {
-			errs <- err
+			log.Printf("error on fix container hostport for [container %s]", container.ID)
 			return
 		}
 	}
@@ -278,6 +264,7 @@ func collectUnit(container container, units chan<- provision.Unit, errs chan<- e
 		conn.Close()
 		unit.Status = provision.StatusStarted
 	}
+	log.Printf("collected data for [container %s] - [app %s]", container.ID, container.AppName)
 	units <- unit
 }
 
@@ -287,6 +274,7 @@ func buildResult(maxSize int, units <-chan provision.Unit) <-chan []provision.Un
 		result := make([]provision.Unit, 0, maxSize)
 		for unit := range units {
 			result = append(result, unit)
+			log.Printf("result for [container %s] - [app %s]", unit.Name, unit.AppName)
 		}
 		ch <- result
 	}()

@@ -34,7 +34,11 @@ func deployCmds(app provision.App, version string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	cmds := []string{docker, "run", "-p", port, "-d", imageName, deployCmd, appRepo}
+	user, err := config.GetString("docker:ssh:user")
+	if err != nil {
+		return nil, err
+	}
+	cmds := []string{docker, "run", "-p", port, "-u", user, "-d", imageName, deployCmd, appRepo}
 	return cmds, nil
 }
 
@@ -58,7 +62,8 @@ func runCmds(imageId string) ([]string, error) {
 		return nil, err
 	}
 	sshCmd := strings.Join(ssh, " && ")
-	cmds := []string{docker, "run", "-d", "-t", "-p", port, imageId, "/bin/bash", "-c", runCmd, "&&", sshCmd}
+	cmd := fmt.Sprintf("%s && %s", runCmd, sshCmd)
+	cmds := []string{docker, "run", "-d", "-t", "-p", port, imageId, "/bin/bash", "-c", cmd}
 	return cmds, nil
 }
 
