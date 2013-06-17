@@ -12,43 +12,48 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/dotcloud/docker/term"
 	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
 )
 
 const (
-	apiVersion = 1.1
+	apiVersion = "v1.1"
 	userAgent  = "go-dockerclient"
 )
 
 var (
-	// Error returned when the endpoint is not a valid HTTP URL.
+	// ErrInvalidEndpoint is returned when the endpoint is not a valid HTTP URL.
 	ErrInvalidEndpoint = errors.New("Invalid endpoint")
 
-	// Error returned when the client cannot connect to the given endpoint.
+	// ErrConnectionRefused is returned when the client cannot connect to the given endpoint.
 	ErrConnectionRefused = errors.New("Cannot connect to Docker endpoint")
 )
 
 // Client is the basic type of this package. It provides methods for
 // interaction with the API.
 type Client struct {
-	endpoint string
-	client   *http.Client
+	endpoint    string
+	endpointURL *url.URL
+	client      *http.Client
 }
 
 // NewClient returns a Client instance ready for communication with the
 // given server endpoint.
 func NewClient(endpoint string) (*Client, error) {
-	if !isValid(endpoint) {
-		return nil, ErrInvalidEndpoint
+	u, err := parseEndpoint(endpoint)
+	if err != nil {
+		return nil, err
 	}
-	return &Client{endpoint: endpoint, client: http.DefaultClient}, nil
+	return &Client{endpoint: endpoint, endpointURL: u, client: http.DefaultClient}, nil
 }
 
 func (c *Client) do(method, path string, data interface{}) ([]byte, int, error) {
@@ -83,7 +88,7 @@ func (c *Client) do(method, path string, data interface{}) ([]byte, int, error) 
 		return nil, -1, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
-		return nil, resp.StatusCode, newAPIClientError(resp.StatusCode, body)
+		return nil, resp.StatusCode, newError(resp.StatusCode, body)
 	}
 	return body, resp.StatusCode, nil
 }
@@ -113,7 +118,7 @@ func (c *Client) stream(method, path string, in io.Reader, out io.Writer) error 
 		if err != nil {
 			return err
 		}
-		return newAPIClientError(resp.StatusCode, body)
+		return newError(resp.StatusCode, body)
 	}
 	if resp.Header.Get("Content-Type") == "application/json" {
 		dec := json.NewDecoder(resp.Body)
@@ -140,8 +145,47 @@ func (c *Client) stream(method, path string, in io.Reader, out io.Writer) error 
 	return nil
 }
 
+func (c *Client) hijack(method, path string, setRawTerminal bool, in *os.File, errStream io.Writer, out io.Writer) error {
+	req, err := http.NewRequest(method, c.getURL(path), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "plain/text")
+	dial, err := net.Dial("tcp", c.endpointURL.Host)
+	if err != nil {
+		return err
+	}
+	clientconn := httputil.NewClientConn(dial, nil)
+	clientconn.Do(req)
+	defer clientconn.Close()
+	rwc, br := clientconn.Hijack()
+	defer rwc.Close()
+	errStdout := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(out, br)
+		errStdout <- err
+	}()
+	if in != nil && setRawTerminal && term.IsTerminal(in.Fd()) && os.Getenv("NORAW") == "" {
+		oldState, err := term.SetRawTerminal()
+		if err != nil {
+			return err
+		}
+		defer term.RestoreTerminal(oldState)
+	}
+	go func() {
+		io.Copy(rwc, in)
+		if err := rwc.(*net.TCPConn).CloseWrite(); err != nil {
+			fmt.Fprintf(errStream, "Couldn't send EOF: %s\n", err)
+		}
+	}()
+	if err := <-errStdout; err != nil {
+		return err
+	}
+	return nil
+}
+
 func (c *Client) getURL(path string) string {
-	return fmt.Sprintf("%s/v%f%s", strings.TrimRight(c.endpoint, "/"), apiVersion, path)
+	return fmt.Sprintf("%s/%s%s", strings.TrimRight(c.endpoint, "/"), apiVersion, path)
 }
 
 type jsonMessage struct {
@@ -200,34 +244,40 @@ func queryString(opts interface{}) string {
 	return items.Encode()
 }
 
-type apiClientError struct {
-	status  int
-	message string
+// Error represents failures in the API. It represents a failure from the API.
+type Error struct {
+	Status  int
+	Message string
 }
 
-func newAPIClientError(status int, body []byte) *apiClientError {
-	return &apiClientError{status: status, message: string(body)}
+func newError(status int, body []byte) *Error {
+	return &Error{Status: status, Message: string(body)}
 }
 
-func (e *apiClientError) Error() string {
-	return fmt.Sprintf("API error (%d): %s", e.status, e.message)
+func (e *Error) Error() string {
+	return fmt.Sprintf("API error (%d): %s", e.Status, e.Message)
 }
 
-func isValid(endpoint string) bool {
+func parseEndpoint(endpoint string) (*url.URL, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
-		return false
+		return nil, ErrInvalidEndpoint
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return false
+		return nil, ErrInvalidEndpoint
 	}
 	_, port, err := net.SplitHostPort(u.Host)
 	if err != nil {
 		if e, ok := err.(*net.AddrError); ok {
-			return e.Err == "missing port in address"
+			if e.Err == "missing port in address" {
+				return u, nil
+			}
 		}
-		return false
+		return nil, ErrInvalidEndpoint
 	}
 	number, err := strconv.ParseInt(port, 10, 64)
-	return err == nil && number > 0 && number < 65536
+	if err == nil && number > 0 && number < 65536 {
+		return u, nil
+	}
+	return nil, ErrInvalidEndpoint
 }
