@@ -33,42 +33,49 @@ function MastheadController($scope) {
     };
 }
 
-function HomeController() {
+function DashboardController($scope, Container) {
     
+}
+
+function StatusBarController($scope, Settings) {
+    $scope.template = 'partials/statusbar.html';
+
+    $scope.uiVersion = Settings.uiVersion;
+    $scope.apiVersion = Settings.version;
+}
+
+function SideBarController($scope, Container, Settings) {
+    $scope.template = 'partials/sidebar.html';
+    $scope.containers = [];
+    $scope.endpoint = Settings.endpoint;
+
+    Container.query({all: 0}, function(d) {
+        $scope.containers = d;    
+    }); 
 }
 
 function SettingsController($scope, Auth, System, Docker, Settings) {
     $scope.auth = {};
     $scope.info = {};
     $scope.docker = {};
+    $scope.endpoint = Settings.endpoint;
+    $scope.apiVersion = Settings.version;
 
     $('#response').hide();
     $scope.alertClass = 'block';
 
-    var showAndHide = function(hide) {
-        $('#response').show();
-        if (hide) {
-            setTimeout(function() { $('#response').hide();}, 5000);
-        }
-    };
-
     $scope.updateAuthInfo = function() {
         if ($scope.auth.password != $scope.auth.cpassword) {
-            $scope.response = 'Your passwords do not match.';
-            showAndHide(true);
+            setSuccessfulResponse($scope, 'Your passwords do not match.', '#response');
             return;
         }
         Auth.update(
             {username: $scope.auth.username, email: $scope.auth.email, password: $scope.auth.password}, function(d) {
                 console.log(d);
-                $scope.alertClass = 'success';
-                $scope.response = 'Auth information updated.';
-                showAndHide(true);
+                setSuccessfulResponse($scope, 'Auth information updated.', '#response');
             }, function(e) {
                console.log(e);
-               $scope.alertClass = 'error';
-               $scope.response = e.data;
-               showAndHide(false);
+               setFailedResponse($scope, e.data, '#response');
             });    
     }; 
 
@@ -89,52 +96,33 @@ function ContainerController($scope, $routeParams, $location, Container) {
     $('#response').hide();
     $scope.alertClass = 'block';
 
-    var showAndHide = function(hide) {
-        $('#response').show();
-        if (hide) {
-            setTimeout(function() { $('#response').hide();}, 5000);
-        }
-    };
-
     $scope.start = function(){
         Container.start({id: $routeParams.id}, function(d) {
             console.log(d);
-            $scope.alertClass = 'success';
-            $scope.response = 'Container started.';
-            showAndHide(true);
+            setSuccessfulResponse($scope, 'Container started.', '#response');
         }, function(e) {
             console.log(e);
-            $scope.alertClass = 'error';
-            $scope.response = e.data;
-            showAndHide(false);
+            setFailedResponse($scope, e.data, '#response');
         }); 
     };
 
     $scope.stop = function() {
         Container.stop({id: $routeParams.id}, function(d) {
             console.log(d);
-            $scope.alertClass = 'success';
-            $scope.response = 'Container stopped.';
-            showAndHide(true);
+            setSuccessfulResponse($scope, 'Container stopped.', '#response');
         }, function(e) {
             console.log(e);
-            $scope.alertClass = 'error';
-            $scope.response = e.data;
-            showAndHide(false);
+            setFailedResponse($scope, e.data, '#response');
         });
     };
 
     $scope.kill = function() {
         Container.kill({id: $routeParams.id}, function(d) {
             console.log(d);
-            $scope.alertClass = 'success';
-            $scope.response = 'Container killed.';
-            showAndHide(true);
+            setSuccessfulResponse($scope, 'Container killed.', '#response');
         }, function(e) {
             console.log(e);
-            $scope.alertClass = 'error';
-            $scope.response = e.data;
-            showAndHide(false);
+            setFailedResponse($scope, e.data, '#response');
         });
     };
 
@@ -142,19 +130,19 @@ function ContainerController($scope, $routeParams, $location, Container) {
         if (confirm("Are you sure you want to remove the container?")) {
             Container.remove({id: $routeParams.id}, function(d) {
                 console.log(d);
-                $scope.alertClass = 'success';
-                $scope.response = 'Container removed.';
-                showAndHide(true);
+                setSuccessfulResponse($scope, 'Container removed.', '#response');
             }, function(e){
                 console.log(e);
-                $scope.alertClass = 'error';
-                $scope.response = e.data;
-                showAndHide(false);
+                setFailedResponse($scope, e.data, '#response');
             });
         }
     };
 
     $scope.changes = [];
+
+    $scope.hasContent = function(data) {
+        return data !== null && data !== undefined && data.length > 1;
+    };
 
     $scope.getChanges = function() {
         Container.changes({id: $routeParams.id}, function(d) {
@@ -166,7 +154,10 @@ function ContainerController($scope, $routeParams, $location, Container) {
         $scope.container = d;        
    }, function(e) {
         console.log(e);
-        $location.path('/containers/');
+        setFailedResponse($scope, e.data, '#response');
+        if (e.status === 404) {
+            $('.detail').hide();
+        }
    }); 
 
    $scope.getChanges();
@@ -198,9 +189,14 @@ function ContainersController($scope, Container, Settings) {
 
 function ImagesController($scope, Image) {
     $scope.predicate = '-Created';
+    $('#response').hide();
+    $scope.alertClass = 'block';
 
     Image.query({}, function(d) {
         $scope.images = d;
+    }, function (e) {
+        console.log(e);
+        setFailedResponse($scope, e.data, '#response');
     });    
 }
 
@@ -210,26 +206,15 @@ function ImageController($scope, $routeParams, $location, Image) {
 
     $('#response').hide();
     $scope.alertClass = 'block';
-
-    var showAndHide = function(hide) {
-        $('#response').show();
-        if (hide) {
-            setTimeout(function() { $('#response').hide();}, 5000);
-        }
-    };
-
+    
     $scope.remove = function() {
         if (confirm("Are you sure you want to delete this image?")) {
             Image.remove({id: $routeParams.id}, function(d) {
                 console.log(d);
-                $scope.alertClass = 'success';
-                $scope.response = 'Image removed.';
-                showAndHide(true);
+                setSuccessfulResponse($scope, 'Image removed.', '#response');
             }, function(e) {
                 console.log(e);
-                $scope.alertClass = 'error';
-                $scope.response = e.data;
-                showAndHide(false);
+                setFailedResponse($scope, e.data, '#response');
             }); 
         }
     };
@@ -244,14 +229,10 @@ function ImageController($scope, $routeParams, $location, Image) {
         var tag = $scope.tag;
         Image.tag({id: $routeParams.id, repo: tag.repo, force: tag.force ? 1 : 0}, function(d) {
             console.log(d);
-            $scope.alertClass = 'success';
-            $scope.response = 'Tag added.';
-            showAndHide(true);
+            setSuccessfulResponse($scope, 'Tag added.', '#response');
         }, function(e) {
             console.log(e);
-            $scope.alertClass = 'error';
-            $scope.response = e.data;
-            showAndHide(false);
+            setFailedResponse($scope, e.data, '#response');
         });
     };
     
@@ -259,7 +240,10 @@ function ImageController($scope, $routeParams, $location, Image) {
         $scope.image = d;
     }, function(e) {
         console.log(e);
-        $location.path('/images/');
+        setFailedResponse($scope, e.data, '#response');
+        if (e.status === 404) {
+            $('.detail').hide();
+        }
     });
 
     $scope.getHistory();
@@ -267,17 +251,21 @@ function ImageController($scope, $routeParams, $location, Image) {
 
 function StartContainerController($scope, $routeParams, $location, Container) {
     $scope.template = 'partials/startcontainer.html';
-    $scope.memory = 0;
-    $scope.memorySwap = 0;
-    $scope.env = '';
-    $scope.dns = '';
-    $scope.volumesFrom = '';
-    $scope.commands = '';
+    $scope.config = {
+        memory: 0,
+        memorySwap: 0,
+        env: '',
+        commands: '',
+        volumesFrom: ''
+    };
+    $scope.commandPlaceholder = '["/bin/echo", "Hello world"]';
 
     $scope.launchContainer = function() {
+        $scope.response = '';
+        
         var cmds = null;
-        if ($scope.commands !== '') {
-            cmds = $scope.commands.split('\n'); 
+        if ($scope.config.commands !== '') {
+            cmds = angular.fromJson($scope.config.commands);
         }
         var id = $routeParams.id;
         var ctor = Container;
@@ -286,10 +274,10 @@ function StartContainerController($scope, $routeParams, $location, Container) {
 
         Container.create({
                 Image: id, 
-                Memory: $scope.memory, 
-                MemorySwap: $scope.memorySwap, 
+                Memory: $scope.config.memory, 
+                MemorySwap: $scope.config.memorySwap, 
                 Cmd: cmds, 
-                VolumesFrom: $scope.volumesFrom
+                VolumesFrom: $scope.config.volumesFrom
             }, function(d) {
                 console.log(d);
                 if (d.Id) {
@@ -306,4 +294,17 @@ function StartContainerController($scope, $routeParams, $location, Container) {
                 $scope.response = e.data; 
         });
     };
+}
+
+function setSuccessfulResponse($scope, msg, msgId) {
+    $scope.alertClass = 'success';
+    $scope.response = msg;
+    $(msgId).show();
+    setTimeout(function() { $(msgId).hide();}, 5000);
+}
+
+function setFailedResponse($scope, msg, msgId) {
+    $scope.alertClass = 'error';
+    $scope.response = msg;
+    $(msgId).show();
 }

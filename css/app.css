@@ -70,11 +70,29 @@
     margin: 0 auto;
   }
 
+  .center {
+    width: 80%;
+    margin: 0 auto;
+  }
+
  .btn-remove {
     margin: 0 auto;
     max-width: 70%;
   }
 
   .actions {
+    margin: 0 auto;
+  }
+
+  .container-bottom {
+      height: 50px;
+  }
+
+  .footer {
+    max-height:6px;    
+  }
+
+  #response {
+    width: 80%;
     margin: 0 auto;
   }
