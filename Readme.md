@@ -53,6 +53,14 @@ Articles:
       A docker.io cookbook that can install docker, manage images, and try to set up an AUFS kernel.
        2 commits, 8 stars, 0 forks
 
+    dynport/dockland:
+      Yet another docker web ui
+       6 commits, 1 stars, 0 forks
+
+    ehazlett/shipyard:
+      Docker web interface
+       13 commits, 22 stars, 2 forks
+
     fsouza/go-dockerclient:
       HTTP client for the Docker remote API.
        86 commits, 1 stars, 1 forks
