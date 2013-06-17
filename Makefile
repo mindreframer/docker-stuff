@@ -4,11 +4,13 @@ SSHCOMMAND_URL = https://raw.github.com/progrium/sshcommand/master/sshcommand
 all: install
 
 install: submodule gitreceive sshcommand
+	cp dokku /usr/local/bin/dokku
 	cp receiver /home/git/receiver
 	cp deploystep /home/git/deploystep
 	cp buildstep/buildstep /home/git/buildstep
 	cp nginx-app-conf /home/git/nginx-app-conf
 	cp nginx-reloader.conf /etc/init/nginx-reloader.conf
+	echo "include /home/git/*/nginx.conf;" > /etc/nginx/conf.d/dokku.conf
 
 submodule:
 	git submodule init

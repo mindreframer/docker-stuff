@@ -5,6 +5,14 @@ case "$1" in
     docker logs $CONTAINER | tail -n 100
     ;;
 
+  create-user)
+    
+    ;;
+  
+  delete-user)
+  
+    ;;
+
   *)
     echo "Usage: ..."
     ;;
