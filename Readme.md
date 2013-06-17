@@ -26,3 +26,54 @@ Articles:
   - http://kencochrane.net/blog/2013/06/running-docker-on-digital-ocean/
   - http://www.alexhudson.com/2013/05/28/a-first-look-at-docker-io/
 
+
+
+<!-- PROJECTS_LIST_START -->
+    crosbymichael/dockerui:
+      A web interface for docker.  http://docker.io
+       27 commits, 110 stars, 3 forks
+
+    dotcloud/docker:
+      Docker - the Linux container runtime
+       1000+ commits, 3,309 stars, 290 forks
+
+    dotcloud/docker-registry:
+      Registry server for Docker (hosting/delivering of repositories and images)
+       36 commits, 38 stars, 6 forks
+
+    dotcloud/dockerlite:
+      Lightweight virtualization system based on LXC and BTRFS. See dotcloud/docker.
+       14 commits, 18 stars, 3 forks
+
+    dotcloud/openstack-docker:
+      Nova driver and Glance backend to use Docker inside OpenStack
+       27 commits, 98 stars, 4 forks
+
+    dreid/docker-cookbook:
+      A docker.io cookbook that can install docker, manage images, and try to set up an AUFS kernel.
+       2 commits, 8 stars, 0 forks
+
+    fsouza/go-dockerclient:
+      HTTP client for the Docker remote API.
+       86 commits, 1 stars, 1 forks
+
+    globocom/docker-cluster:
+      Cluster support for Docker,  using the remote API.
+       35 commits, 3 stars, 0 forks
+
+    globocom/tsuru:
+      Open source Platform as a Service.
+       1000+ commits, 532 stars, 39 forks
+
+    progrium/buildstep:
+      Buildstep uses Docker and Buildpacks to build applications like Heroku
+       50 commits, 86 stars, 8 forks
+
+    progrium/dokku:
+      Docker powered mini-Heroku in less than 100 lines of Bash
+       62 commits, 417 stars, 27 forks
+
+    portertech/kitchen-docker:
+      A Test Kitchen Driver for Docker
+       29 commits, 11 stars, 4 forks
+<!-- PROJECTS_LIST_END -->
