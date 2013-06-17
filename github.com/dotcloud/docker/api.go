@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-const APIVERSION = 1.1
+const APIVERSION = 1.2
 
 func hijackServer(w http.ResponseWriter) (io.ReadCloser, io.Writer, error) {
 	conn, _, err := w.(http.Hijacker).Hijack()
@@ -45,6 +45,8 @@ func httpError(w http.ResponseWriter, err error) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 	} else if strings.HasPrefix(err.Error(), "Bad parameter") {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+	} else if strings.HasPrefix(err.Error(), "Conflict") {
+		http.Error(w, err.Error(), http.StatusConflict)
 	} else if strings.HasPrefix(err.Error(), "Impossible") {
 		http.Error(w, err.Error(), http.StatusNotAcceptable)
 	} else {
@@ -69,8 +71,10 @@ func getBoolParam(value string) (bool, error) {
 }
 
 func getAuth(srv *Server, version float64, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
-	// FIXME: Handle multiple login at once
-	// FIXME: return specific error code if config file missing?
+	if version > 1.1 {
+		w.WriteHeader(http.StatusNotFound)
+		return nil
+	}
 	authConfig, err := auth.LoadConfig(srv.runtime.root)
 	if err != nil {
 		if err != auth.ErrConfigFileMissing {
@@ -87,29 +91,34 @@ func getAuth(srv *Server, version float64, w http.ResponseWriter, r *http.Reques
 }
 
 func postAuth(srv *Server, version float64, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
-	// FIXME: Handle multiple login at once
-	config := &auth.AuthConfig{}
-	if err := json.NewDecoder(r.Body).Decode(config); err != nil {
+	authConfig := &auth.AuthConfig{}
+	err := json.NewDecoder(r.Body).Decode(authConfig)
+	if err != nil {
 		return err
 	}
-
-	authConfig, err := auth.LoadConfig(srv.runtime.root)
-	if err != nil {
-		if err != auth.ErrConfigFileMissing {
+	status := ""
+	if version > 1.1 {
+		status, err = auth.Login(authConfig, false)
+		if err != nil {
 			return err
 		}
-		authConfig = &auth.AuthConfig{}
-	}
-	if config.Username == authConfig.Username {
-		config.Password = authConfig.Password
-	}
+	} else {
+		localAuthConfig, err := auth.LoadConfig(srv.runtime.root)
+		if err != nil {
+			if err != auth.ErrConfigFileMissing {
+				return err
+			}
+		}
+		if authConfig.Username == localAuthConfig.Username {
+			authConfig.Password = localAuthConfig.Password
+		}
 
-	newAuthConfig := auth.NewAuthConfig(config.Username, config.Password, config.Email, srv.runtime.root)
-	status, err := auth.Login(newAuthConfig)
-	if err != nil {
-		return err
+		newAuthConfig := auth.NewAuthConfig(authConfig.Username, authConfig.Password, authConfig.Email, srv.runtime.root)
+		status, err = auth.Login(newAuthConfig, true)
+		if err != nil {
+			return err
+		}
 	}
-
 	if status != "" {
 		b, err := json.Marshal(&APIAuth{Status: status})
 		if err != nil {
@@ -320,7 +329,7 @@ func postImagesCreate(srv *Server, version float64, w http.ResponseWriter, r *ht
 	sf := utils.NewStreamFormatter(version > 1.0)
 	if image != "" { //pull
 		registry := r.Form.Get("registry")
-		if err := srv.ImagePull(image, tag, registry, w, sf); err != nil {
+		if err := srv.ImagePull(image, tag, registry, w, sf, &auth.AuthConfig{}); err != nil {
 			if sf.Used() {
 				w.Write(sf.FormatError(err))
 				return nil
@@ -388,6 +397,18 @@ func postImagesInsert(srv *Server, version float64, w http.ResponseWriter, r *ht
 }
 
 func postImagesPush(srv *Server, version float64, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+	authConfig := &auth.AuthConfig{}
+	if version > 1.1 {
+		if err := json.NewDecoder(r.Body).Decode(authConfig); err != nil {
+			return err
+		}
+	} else {
+		localAuthConfig, err := auth.LoadConfig(srv.runtime.root)
+		if err != nil && err != auth.ErrConfigFileMissing {
+			return err
+		}
+		authConfig = localAuthConfig
+	}
 	if err := parseForm(r); err != nil {
 		return err
 	}
@@ -401,7 +422,7 @@ func postImagesPush(srv *Server, version float64, w http.ResponseWriter, r *http
 		w.Header().Set("Content-Type", "application/json")
 	}
 	sf := utils.NewStreamFormatter(version > 1.0)
-	if err := srv.ImagePush(name, registry, w, sf); err != nil {
+	if err := srv.ImagePush(name, registry, w, sf, authConfig); err != nil {
 		if sf.Used() {
 			w.Write(sf.FormatError(err))
 			return nil
@@ -413,17 +434,23 @@ func postImagesPush(srv *Server, version float64, w http.ResponseWriter, r *http
 
 func postContainersCreate(srv *Server, version float64, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
 	config := &Config{}
+	out := &APIRun{}
+
 	if err := json.NewDecoder(r.Body).Decode(config); err != nil {
 		return err
 	}
+
+	if len(config.Dns) == 0 && len(srv.runtime.Dns) == 0 && utils.CheckLocalDns() {
+		out.Warnings = append(out.Warnings, fmt.Sprintf("Docker detected local DNS server on resolv.conf. Using default external servers: %v", defaultDns))
+		config.Dns = defaultDns
+	}
+
 	id, err := srv.ContainerCreate(config)
 	if err != nil {
 		return err
 	}
+	out.ID = id
 
-	out := &APIRun{
-		ID: id,
-	}
 	if config.Memory > 0 && !srv.runtime.capabilities.MemoryLimit {
 		log.Println("WARNING: Your kernel does not support memory limit capabilities. Limitation discarded.")
 		out.Warnings = append(out.Warnings, "Your kernel does not support memory limit capabilities. Limitation discarded.")
@@ -432,6 +459,7 @@ func postContainersCreate(srv *Server, version float64, w http.ResponseWriter, r
 		log.Println("WARNING: Your kernel does not support swap limit capabilities. Limitation discarded.")
 		out.Warnings = append(out.Warnings, "Your kernel does not support memory swap capabilities. Limitation discarded.")
 	}
+
 	b, err := json.Marshal(out)
 	if err != nil {
 		return err
@@ -481,14 +509,30 @@ func deleteContainers(srv *Server, version float64, w http.ResponseWriter, r *ht
 }
 
 func deleteImages(srv *Server, version float64, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+	if err := parseForm(r); err != nil {
+		return err
+	}
 	if vars == nil {
 		return fmt.Errorf("Missing parameter")
 	}
 	name := vars["name"]
-	if err := srv.ImageDelete(name); err != nil {
+	imgs, err := srv.ImageDelete(name, version > 1.1)
+	if err != nil {
 		return err
 	}
-	w.WriteHeader(http.StatusNoContent)
+	if imgs != nil {
+		if len(*imgs) != 0 {
+			b, err := json.Marshal(imgs)
+			if err != nil {
+				return err
+			}
+			writeJSON(w, b)
+		} else {
+			return fmt.Errorf("Conflict, %s wasn't deleted", name)
+		}
+	} else {
+		w.WriteHeader(http.StatusNoContent)
+	}
 	return nil
 }
 

@@ -328,7 +328,7 @@ func (r *Registry) PushRegistryTag(remote, revision, tag, registry string, token
 	return nil
 }
 
-func (r *Registry) PushImageJSONIndex(remote string, imgList []*ImgData, validate bool) (*RepositoryData, error) {
+func (r *Registry) PushImageJSONIndex(remote string, imgList []*ImgData, validate bool, regs []string) (*RepositoryData, error) {
 	imgListJSON, err := json.Marshal(imgList)
 	if err != nil {
 		return nil, err
@@ -347,6 +347,9 @@ func (r *Registry) PushImageJSONIndex(remote string, imgList []*ImgData, validat
 	req.SetBasicAuth(r.authConfig.Username, r.authConfig.Password)
 	req.ContentLength = int64(len(imgListJSON))
 	req.Header.Set("X-Docker-Token", "true")
+	if validate {
+		req.Header["X-Docker-Endpoints"] = regs
+	}
 
 	res, err := r.client.Do(req)
 	if err != nil {
@@ -364,7 +367,9 @@ func (r *Registry) PushImageJSONIndex(remote string, imgList []*ImgData, validat
 		req.SetBasicAuth(r.authConfig.Username, r.authConfig.Password)
 		req.ContentLength = int64(len(imgListJSON))
 		req.Header.Set("X-Docker-Token", "true")
-
+		if validate {
+			req.Header["X-Docker-Endpoints"] = regs
+		}
 		res, err = r.client.Do(req)
 		if err != nil {
 			return nil, err
@@ -473,10 +478,7 @@ type Registry struct {
 	authConfig *auth.AuthConfig
 }
 
-func NewRegistry(root string) *Registry {
-	// If the auth file does not exist, keep going
-	authConfig, _ := auth.LoadConfig(root)
-
+func NewRegistry(root string, authConfig *auth.AuthConfig) *Registry {
 	httpTransport := &http.Transport{
 		DisableKeepAlives: true,
 		Proxy: http.ProxyFromEnvironment,
