@@ -16,10 +16,26 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
 from django.utils.translation import ugettext as _
 from django.contrib import messages
+from django.core.urlresolvers import reverse
+from django.http import HttpResponse
+from django.core import serializers
 import django_rq
-from containers.models import Host
-from containers.forms import HostForm, CreateContainerForm, ImportImageForm
+from containers.models import Host, Container
+from containers.forms import (HostForm, CreateContainerForm,
+    ImportRepositoryForm, ImageBuildForm)
 from shipyard import utils
+from docker import client
+import urllib
+import random
+import json
+import tempfile
+
+def handle_upload(f):
+    tmp_file = tempfile.mktemp()
+    with open(tmp_file, 'w') as d:
+        for c in f.chunks():
+            d.write(c)
+    return tmp_file
 
 @require_http_methods(['POST'])
 @login_required
@@ -33,18 +49,31 @@ def add_host(request):
 @login_required
 def create_container(request):
     form = CreateContainerForm(request.POST)
-    # TODO: create / start container
     image = form.data.get('image')
+    environment = form.data.get('environment')
     command = form.data.get('command')
     if command.strip() == '':
         command = None
+    if environment.strip() == '':
+        environment = None
+    else:
+        environment = environment.split()
     ports = form.data.get('ports', '').split()
     hosts = form.data.getlist('hosts')
+    private = form.data.get('private')
+    user = None
     for i in hosts:
         host = Host.objects.get(id=i)
-        host.create_container(image, command, ports)
-    messages.add_message(request, messages.INFO, _('Created') + ' {0}'.format(
-        image))
+        if private:
+            user = request.user
+        host.create_container(image, command, ports,
+            environment=environment, description=form.data.get('description'),
+            user=user)
+    if hosts:
+        messages.add_message(request, messages.INFO, _('Created') + ' {0}'.format(
+            image))
+    else:
+        messages.add_message(request, messages.ERROR, _('No hosts selected'))
     return redirect('dashboard.views.index')
 
 @login_required
@@ -74,11 +103,12 @@ def destroy_container(request, host, container_id):
 @require_http_methods(['POST'])
 @login_required
 def import_image(request):
-    form = ImportImageForm(request.POST)
+    form = ImportRepositoryForm(request.POST)
     hosts = form.data.getlist('hosts')
     for i in hosts:
         host = Host.objects.get(id=i)
-        django_rq.enqueue(host.import_image, form.data.get('repository'))
+        args = (form.data.get('repository'),)
+        utils.get_queue('shipyard').enqueue(host.import_image, args=args, timeout=3600)
     messages.add_message(request, messages.INFO, _('Importing') + ' {0}'.format(
         form.data.get('repository')) + '. ' + _('This may take a few minutes.'))
     return redirect('dashboard.views.index')
@@ -93,3 +123,65 @@ def refresh(request):
         h.invalidate_cache()
     return redirect('dashboard.views.index')
 
+@require_http_methods(['GET'])
+@login_required
+def search_repository(request):
+    '''
+    Searches the docker index for repositories
+
+    :param query: Query to search for
+
+    '''
+    query = request.GET.get('query', {})
+    # get random host for query -- just needs a connection
+    hosts = Host.objects.filter(enabled=True)
+    rnd = random.randint(0, len(hosts)-1)
+    host = hosts[rnd]
+    url = 'http://{0}:{1}'.format(host.hostname, host.port)
+    c = client.Client(url)
+    data = c.search(query)
+    return HttpResponse(json.dumps(data), content_type='application/json')
+
+@login_required
+def container_info(request, container_id=None):
+    '''
+    Gets / Sets container metatdata
+
+    '''
+    if request.method == 'POST':
+        data = request.POST
+        container_id = data.get('container-id')
+        c = Container.objects.get(container_id=container_id)
+        c.description = data.get('description')
+        c.save()
+        return redirect(reverse('index'))
+    c = Container.objects.get(container_id=container_id)
+    data = serializers.serialize('json', [c], ensure_ascii=False)[1:-1]
+    return HttpResponse(data, content_type='application/json')
+
+@require_http_methods(['POST'])
+@login_required
+def build_image(request):
+    '''
+    Builds a container image
+
+    '''
+    form = ImageBuildForm(request.POST)
+    url = form.data.get('url')
+    tag = form.data.get('tag')
+    hosts = form.data.getlist('hosts')
+    # dockerfile takes precedence
+    docker_file = None
+    if request.FILES.has_key('dockerfile'):
+        docker_file = handle_upload(request.FILES.get('dockerfile'))
+    else:
+        docker_file = tempfile.mktemp()
+        urllib.urlretrieve(url, docker_file)
+    for i in hosts:
+        host = Host.objects.get(id=i)
+        args = (docker_file, tag)
+        utils.get_queue('shipyard').enqueue(host.build_image, args=args,
+            timeout=3600)
+    messages.add_message(request, messages.INFO,
+        _('Building image from docker file.  This may take a few minutes.'))
+    return redirect(reverse('index'))
