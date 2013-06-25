@@ -9,7 +9,7 @@ best to use a fresh VM. The bootstrapper will install everything it needs.
 
 ## Installing
 
-    $ wget -qO- j.mp/dokku-bootstrap | bash
+    $ wget -qO- https://raw.github.com/progrium/dokku/master/bootstrap.sh | sudo bash
 
 This may take around 5 minutes. Certainly better than the several hours it takes to bootstrap Cloud Foundry.
 
@@ -21,13 +21,13 @@ By default it's set to whatever the hostname the host has.
 You'll have to add a public key associated with a username as it says at the end of the bootstrapper. You'll do something
 like this from your local machine:
 
-    $ cat ~/.ssh/id_rsa.pub | ssh root@progriumapp.com "gitreceive upload-key progrium"
+    $ cat ~/.ssh/id_rsa.pub | ssh progriumapp.com "sudo gitreceive upload-key progrium"
 
 That's it!
 
 ## Deploy an App
 
-Right now Buildstep supports the Node.js, Ruby, and Java buildpacks. It's not hard to add more, [go add more](https://github.com/progrium/buildstep#adding-buildpacks)! Let's deploy
+Right now Buildstep supports buildpacks for Node.js, Ruby, Python, [and more](https://github.com/progrium/buildstep#supported-buildpacks). It's not hard to add more, [go add more](https://github.com/progrium/buildstep#adding-buildpacks)! Let's deploy
 the Heroku Node.js sample app. All you have to do is add a remote to name the app. It's created on-the-fly.
 
     $ cd node-js-sample
@@ -57,7 +57,7 @@ may be set to override the defaults (see the bootstrap.sh script for how these a
 
     $ wget j.mp/dokku-bootstrap
     $ chmod +x bootstrap.sh
-    $ DOKKU_REPO=https://github.com/yourusername/dokku.git bootstrap.sh
+    $ sudo DOKKU_REPO=https://github.com/yourusername/dokku.git ./bootstrap.sh
     
 ## Upgrading
 
@@ -66,16 +66,20 @@ To update the deploy step (this is updated less frequently):
 
     $ cd ~/dokku
     $ git pull origin master
-    $ make install
+    $ sudo make install
     
 More frequently, the build step is updated. This is where the app "stack" lives and where buildpacks
 are supported. You can update this by running:
 
     $ cd ~/dokku/buildstep
     $ git pull origin master
-    $ make build
+    $ sudo make build
 
 Nothing needs to be restarted. Changes will take effect on the next push / deployment.
+
+## Support
+
+You can use [Github Issues](https://github.com/progrium/dokku/issues), check [Troubleshooting](https://github.com/progrium/dokku/wiki/Troubleshooting) on the wiki, or join us on Freenode in #dokku
 
 ## Components
 
