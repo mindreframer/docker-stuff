@@ -1,0 +1,24 @@
+common:
+    s3_access_key: <%= s3_access_key %>
+    s3_secret_key: <%= s3_secret_key %>
+    s3_bucket: <%= s3_bucket %>
+
+dev:
+    storage: local
+    storage_path: /tmp/registry
+    loglevel: debug
+
+prod:
+    storage: s3
+    storage_path: /prod
+    email_exceptions:
+        smtp_host: <%= smtp_host %>
+        smtp_login: <%= smtp_login %>
+        smtp_password: <%= smtp_password %>
+        from_addr: docker-registry@localdomain.local
+        to_addr: noise+dockerregistry@localdomain.local
+
+test:
+    storage: local
+    storage_path: /tmp/test
+    disable_token_auth: true
