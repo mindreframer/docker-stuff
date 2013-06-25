@@ -7,6 +7,18 @@ Heroku-style application builds using Docker and Buildpacks. Used by [Dokku](htt
  * Docker
  * Git
 
+## Supported Buildpacks
+
+Buildpacks should generally just work, but many of them make assumptions about their environment. So Buildstep has a list of officially supported buildpacks that are built-in and ready to be used.
+
+ * [Ruby](https://github.com/heroku/heroku-buildpack-ruby)
+ * [Node.js](https://github.com/heroku/heroku-buildpack-nodejs)
+ * [Java](https://github.com/heroku/heroku-buildpack-java)
+ * [Play!](https://github.com/heroku/heroku-buildpack-play)
+ * [Python](https://github.com/heroku/heroku-buildpack-python)
+ * [PHP](https://github.com/heroku/heroku-buildpack-php.git)
+ * [Go](https://github.com/kr/heroku-buildpack-go.git)
+
 ## Building Buildstep
 
 The buildstep script uses a buildstep base container that needs to be built. It must be created before
@@ -35,7 +47,7 @@ a starter script that takes a process type. Run your app with:
 Buildstep needs to support a buildpack by installing packages needed to run the build and to run the application
 it builds. For example, the Python buildpack would need Python to be installed.
 
-To add a new buildpack to builstep, add commands to install the necessary packages that the buildpack and built
+To add a new buildpack to buildstep, add commands to install the necessary packages that the buildpack and built
 application environment will need to stack/packages.txt and stack/prepare. Then add the buildpack Git URL to the file stack/buildpacks.txt
 
 You'll then have to re-build.
