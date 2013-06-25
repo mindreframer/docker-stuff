@@ -65,6 +65,10 @@ Articles:
       HTTP client for the Docker remote API.
        119 commits, 2 stars, 1 forks
 
+    georgebashi/docker-simpleregistry:
+
+       21 commits, 0 stars, 0 forks
+
     globocom/docker-cluster:
       Cluster support for Docker,  using the remote API.
        43 commits, 4 stars, 0 forks
@@ -84,4 +88,12 @@ Articles:
     portertech/kitchen-docker:
       A Test Kitchen Driver for Docker
        39 commits, 16 stars, 6 forks
+
+    swipely/docker-api:
+      A lightweight Docker API for Ruby
+       80 commits, 3 stars, 0 forks
+
+    justone/docker-mongodb:
+      Dockerized MongoDB (with SSHD)
+       3 commits, 1 stars, 0 forks
 <!-- PROJECTS_LIST_END -->
