@@ -14,7 +14,6 @@ import (
 	"github.com/globocom/tsuru/exec"
 	"github.com/globocom/tsuru/log"
 	"github.com/globocom/tsuru/provision"
-	"github.com/globocom/tsuru/queue"
 	"github.com/globocom/tsuru/router"
 	_ "github.com/globocom/tsuru/router/hipache"
 	_ "github.com/globocom/tsuru/router/nginx"
@@ -24,6 +23,7 @@ import (
 	"labix.org/v2/mgo"
 	"net"
 	"sync"
+	"time"
 )
 
 func init() {
@@ -107,10 +107,13 @@ func (p *dockerProvisioner) Deploy(a provision.App, version string, w io.Writer)
 	} else if _, err := start(a, imageId, w); err != nil {
 		return err
 	}
-	app.Enqueue(queue.Message{
-		Action: app.RegenerateApprcAndStart,
-		Args:   []string{a.GetName()},
-	})
+	go func() {
+		time.Sleep(5e9)
+		err := a.SerializeEnvVars()
+		if err != nil {
+			log.Printf("Failed to serialize env vars: %s.", err)
+		}
+	}()
 	return nil
 }
 
@@ -243,7 +246,7 @@ func collectUnit(container container, units chan<- provision.Unit, wg *sync.Wait
 	case "created":
 		return
 	}
-	dockerContainer, err := dockerCluster.InspectContainer(container.ID)
+	dockerContainer, err := dockerCluster().InspectContainer(container.ID)
 	if err != nil {
 		log.Printf("error on inspecting [container %s] for collect data", container.ID)
 		return
