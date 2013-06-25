@@ -1,3 +1,4 @@
+https://github.com/alphagov/gantry.git
 https://github.com/crosbymichael/dockerui.git
 https://github.com/dotcloud/docker.git
 https://github.com/dotcloud/docker-registry.git
