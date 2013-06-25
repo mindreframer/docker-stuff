@@ -77,6 +77,10 @@ Articles:
       Open source Platform as a Service.
        1000+ commits, 537 stars, 39 forks
 
+    jamescarr/puppet-docker-registry:
+      Puppet module that installs and configures docker registry with opinionated defaults.
+       12 commits, 1 stars, 0 forks
+
     progrium/buildstep:
       Buildstep uses Docker and Buildpacks to build applications like Heroku
        64 commits, 129 stars, 22 forks
