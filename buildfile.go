@@ -14,7 +14,7 @@ import (
 )
 
 type BuildFile interface {
-	Build(io.Reader, io.Reader) (string, error)
+	Build(io.Reader) (string, error)
 	CmdFrom(string) error
 	CmdRun(string) error
 }
@@ -101,6 +101,7 @@ func (b *buildFile) CmdRun(args string) error {
 	if cache, err := b.srv.ImageGetCached(b.image, b.config); err != nil {
 		return err
 	} else if cache != nil {
+		fmt.Fprintf(b.out, " ---> Using cache\n")
 		utils.Debugf("[BUILDER] Use cached version")
 		b.image = cache.ID
 		return nil
@@ -124,8 +125,8 @@ func (b *buildFile) CmdEnv(args string) error {
 	if len(tmp) != 2 {
 		return fmt.Errorf("Invalid ENV format")
 	}
-	key := strings.Trim(tmp[0], " ")
-	value := strings.Trim(tmp[1], " ")
+	key := strings.Trim(tmp[0], " \t")
+	value := strings.Trim(tmp[1], " \t")
 
 	for i, elem := range b.config.Env {
 		if strings.HasPrefix(elem, key+"=") {
@@ -164,6 +165,45 @@ func (b *buildFile) CmdCopy(args string) error {
 	return fmt.Errorf("COPY has been deprecated. Please use ADD instead")
 }
 
+func (b *buildFile) addRemote(container *Container, orig, dest string) error {
+	file, err := utils.Download(orig, ioutil.Discard)
+	if err != nil {
+		return err
+	}
+	defer file.Body.Close()
+
+	return container.Inject(file.Body, dest)
+}
+
+func (b *buildFile) addContext(container *Container, orig, dest string) error {
+	origPath := path.Join(b.context, orig)
+	destPath := path.Join(container.RootfsPath(), dest)
+	// Preserve the trailing '/'
+	if dest[len(dest)-1] == '/' {
+		destPath = destPath + "/"
+	}
+	fi, err := os.Stat(origPath)
+	if err != nil {
+		return err
+	}
+	if fi.IsDir() {
+		if err := CopyWithTar(origPath, destPath); err != nil {
+			return err
+		}
+		// First try to unpack the source as an archive
+	} else if err := UntarPath(origPath, destPath); err != nil {
+		utils.Debugf("Couldn't untar %s to %s: %s", origPath, destPath, err)
+		// If that fails, just copy it as a regular file
+		if err := os.MkdirAll(path.Dir(destPath), 0700); err != nil {
+			return err
+		}
+		if err := CopyWithTar(origPath, destPath); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (b *buildFile) CmdAdd(args string) error {
 	if b.context == "" {
 		return fmt.Errorf("No context given. Impossible to use ADD")
@@ -172,14 +212,14 @@ func (b *buildFile) CmdAdd(args string) error {
 	if len(tmp) != 2 {
 		return fmt.Errorf("Invalid ADD format")
 	}
-	orig := strings.Trim(tmp[0], " ")
-	dest := strings.Trim(tmp[1], " ")
+	orig := strings.Trim(tmp[0], " \t")
+	dest := strings.Trim(tmp[1], " \t")
 
 	cmd := b.config.Cmd
-
-	// Create the container and start it
 	b.config.Cmd = []string{"/bin/sh", "-c", fmt.Sprintf("#(nop) ADD %s in %s", orig, dest)}
+
 	b.config.Image = b.image
+	// Create the container and start it
 	container, err := b.builder.Create(b.config)
 	if err != nil {
 		return err
@@ -191,35 +231,16 @@ func (b *buildFile) CmdAdd(args string) error {
 	}
 	defer container.Unmount()
 
-	origPath := path.Join(b.context, orig)
-	destPath := path.Join(container.RootfsPath(), dest)
-
-	fi, err := os.Stat(origPath)
-	if err != nil {
-		return err
-	}
-	if fi.IsDir() {
-		if err := os.MkdirAll(destPath, 0700); err != nil {
+	if utils.IsURL(orig) {
+		if err := b.addRemote(container, orig, dest); err != nil {
 			return err
-		}
-
-		files, err := ioutil.ReadDir(path.Join(b.context, orig))
-		if err != nil {
-			return err
-		}
-		for _, fi := range files {
-			if err := utils.CopyDirectory(path.Join(origPath, fi.Name()), path.Join(destPath, fi.Name())); err != nil {
-				return err
-			}
 		}
 	} else {
-		if err := os.MkdirAll(path.Dir(destPath), 0700); err != nil {
-			return err
-		}
-		if err := utils.CopyDirectory(origPath, destPath); err != nil {
+		if err := b.addContext(container, orig, dest); err != nil {
 			return err
 		}
 	}
+
 	if err := b.commit(container.ID, cmd, fmt.Sprintf("ADD %s in %s", orig, dest)); err != nil {
 		return err
 	}
@@ -239,6 +260,7 @@ func (b *buildFile) run() (string, error) {
 		return "", err
 	}
 	b.tmpContainers[c.ID] = struct{}{}
+	fmt.Fprintf(b.out, " ---> Running in %s\n", utils.TruncateID(c.ID))
 
 	//start the container
 	if err := c.Start(); err != nil {
@@ -260,31 +282,31 @@ func (b *buildFile) commit(id string, autoCmd []string, comment string) error {
 	}
 	b.config.Image = b.image
 	if id == "" {
+		cmd := b.config.Cmd
 		b.config.Cmd = []string{"/bin/sh", "-c", "#(nop) " + comment}
+		defer func(cmd []string) { b.config.Cmd = cmd }(cmd)
 
 		if cache, err := b.srv.ImageGetCached(b.image, b.config); err != nil {
 			return err
 		} else if cache != nil {
+			fmt.Fprintf(b.out, " ---> Using cache\n")
 			utils.Debugf("[BUILDER] Use cached version")
 			b.image = cache.ID
 			return nil
 		} else {
 			utils.Debugf("[BUILDER] Cache miss")
 		}
-
-		// Create the container and start it
 		container, err := b.builder.Create(b.config)
 		if err != nil {
 			return err
 		}
 		b.tmpContainers[container.ID] = struct{}{}
-
+		fmt.Fprintf(b.out, " ---> Running in %s\n", utils.TruncateID(container.ID))
+		id = container.ID
 		if err := container.EnsureMounted(); err != nil {
 			return err
 		}
 		defer container.Unmount()
-
-		id = container.ID
 	}
 
 	container := b.runtime.Get(id)
@@ -305,19 +327,25 @@ func (b *buildFile) commit(id string, autoCmd []string, comment string) error {
 	return nil
 }
 
-func (b *buildFile) Build(dockerfile, context io.Reader) (string, error) {
-	if context != nil {
-		name, err := ioutil.TempDir("/tmp", "docker-build")
-		if err != nil {
-			return "", err
-		}
-		if err := Untar(context, name); err != nil {
-			return "", err
-		}
-		defer os.RemoveAll(name)
-		b.context = name
+func (b *buildFile) Build(context io.Reader) (string, error) {
+	// FIXME: @creack any reason for using /tmp instead of ""?
+	// FIXME: @creack "name" is a terrible variable name
+	name, err := ioutil.TempDir("/tmp", "docker-build")
+	if err != nil {
+		return "", err
 	}
+	if err := Untar(context, name); err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(name)
+	b.context = name
+	dockerfile, err := os.Open(path.Join(name, "Dockerfile"))
+	if err != nil {
+		return "", fmt.Errorf("Can't build a directory with no Dockerfile")
+	}
+	// FIXME: "file" is also a terrible variable name ;)
 	file := bufio.NewReader(dockerfile)
+	stepN := 0
 	for {
 		line, err := file.ReadString('\n')
 		if err != nil {
@@ -327,7 +355,7 @@ func (b *buildFile) Build(dockerfile, context io.Reader) (string, error) {
 				return "", err
 			}
 		}
-		line = strings.Replace(strings.TrimSpace(line), "	", " ", 1)
+		line = strings.Trim(strings.Replace(line, "\t", " ", -1), " \t\r\n")
 		// Skip comments and empty line
 		if len(line) == 0 || line[0] == '#' {
 			continue
@@ -338,12 +366,13 @@ func (b *buildFile) Build(dockerfile, context io.Reader) (string, error) {
 		}
 		instruction := strings.ToLower(strings.Trim(tmp[0], " "))
 		arguments := strings.Trim(tmp[1], " ")
-
-		fmt.Fprintf(b.out, "%s %s (%s)\n", strings.ToUpper(instruction), arguments, b.image)
+		stepN += 1
+		// FIXME: only count known instructions as build steps
+		fmt.Fprintf(b.out, "Step %d : %s %s\n", stepN, strings.ToUpper(instruction), arguments)
 
 		method, exists := reflect.TypeOf(b).MethodByName("Cmd" + strings.ToUpper(instruction[:1]) + strings.ToLower(instruction[1:]))
 		if !exists {
-			fmt.Fprintf(b.out, "Skipping unknown instruction %s\n", strings.ToUpper(instruction))
+			fmt.Fprintf(b.out, "# Skipping unknown instruction %s\n", strings.ToUpper(instruction))
 			continue
 		}
 		ret := method.Func.Call([]reflect.Value{reflect.ValueOf(b), reflect.ValueOf(arguments)})[0].Interface()
@@ -351,10 +380,10 @@ func (b *buildFile) Build(dockerfile, context io.Reader) (string, error) {
 			return "", ret.(error)
 		}
 
-		fmt.Fprintf(b.out, "===> %v\n", b.image)
+		fmt.Fprintf(b.out, " ---> %v\n", utils.TruncateID(b.image))
 	}
 	if b.image != "" {
-		fmt.Fprintf(b.out, "Build successful.\n===> %s\n", b.image)
+		fmt.Fprintf(b.out, "Successfully built %s\n", utils.TruncateID(b.image))
 		return b.image, nil
 	}
 	return "", fmt.Errorf("An error occured during the build\n")
