@@ -7,16 +7,16 @@ package docker
 import (
 	"bytes"
 	"fmt"
+	"github.com/dotcloud/docker"
+	dockerClient "github.com/fsouza/go-dockerclient"
 	"github.com/globocom/config"
 	"github.com/globocom/docker-cluster/cluster"
 	etesting "github.com/globocom/tsuru/exec/testing"
 	ftesting "github.com/globocom/tsuru/fs/testing"
-	"github.com/globocom/tsuru/log"
 	rtesting "github.com/globocom/tsuru/router/testing"
 	"github.com/globocom/tsuru/testing"
 	"labix.org/v2/mgo/bson"
 	"launchpad.net/gocheck"
-	stdlog "log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -31,115 +31,21 @@ func (s *S) TestContainerGetAddress(c *gocheck.C) {
 }
 
 func (s *S) TestNewContainer(c *gocheck.C) {
-	var called bool
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		if strings.Contains(r.URL.Path, "/containers/") {
-			w.Write([]byte(inspectOut))
-		}
-	}))
-	defer server.Close()
-	oldCluster := dockerCluster
-	var err error
-	dockerCluster, err = cluster.New(
-		cluster.Node{ID: "server", Address: server.URL},
-	)
+	err := s.newImage()
 	c.Assert(err, gocheck.IsNil)
-	defer func() {
-		dockerCluster = oldCluster
-	}()
-	id := "945132e7b4c9"
-	out := map[string][][]byte{
-		"run": {[]byte(id)},
-	}
-	fexec := &etesting.FakeExecutor{Output: out}
-	setExecut(fexec)
-	defer setExecut(nil)
 	app := testing.NewFakeApp("app-name", "python", 1)
 	rtesting.FakeRouter.AddBackend(app.GetName())
 	defer rtesting.FakeRouter.RemoveBackend(app.GetName())
-	_, err = newContainer(app, []string{"docker", "run"})
-	defer s.conn.Collection(s.collName).RemoveId(id)
-	var cont container
-	err = s.conn.Collection(s.collName).FindId(id).One(&cont)
+	cont, err := newContainer(app, getImage(app), []string{"docker", "run"})
 	c.Assert(err, gocheck.IsNil)
-	c.Assert(cont.ID, gocheck.Equals, id)
-	c.Assert(cont.AppName, gocheck.Equals, "app-name")
-	c.Assert(cont.IP, gocheck.Equals, "10.10.10.10")
-	c.Assert(cont.HostPort, gocheck.Equals, "34233")
-	c.Assert(cont.Port, gocheck.Equals, s.port)
-	c.Assert(called, gocheck.Equals, true)
-}
-
-func (s *S) TestNewContainerCallsDockerCreate(c *gocheck.C) {
-	fexec := &etesting.FakeExecutor{}
-	setExecut(fexec)
-	defer setExecut(nil)
-	app := testing.NewFakeApp("app-name", "python", 1)
-	cmds := []string{"docker", "run"}
-	newContainer(app, cmds)
-	defer s.conn.Collection(s.collName).Remove(bson.M{"appname": app.GetName()})
-	c.Assert(fexec.ExecutedCmd("docker", cmds[1:]), gocheck.Equals, true)
-}
-
-func (s *S) TestNewContainerReturnsNilAndLogsOnError(c *gocheck.C) {
-	w := new(bytes.Buffer)
-	l := stdlog.New(w, "", stdlog.LstdFlags)
-	log.SetLogger(l)
-	fexec := &etesting.ErrorExecutor{}
-	setExecut(fexec)
-	defer setExecut(nil)
-	app := testing.NewFakeApp("myapp", "python", 1)
-	cmds, err := deployCmds(app, "version")
+	defer cont.remove()
+	c.Assert(cont.ID, gocheck.Not(gocheck.Equals), "")
+	c.Assert(cont, gocheck.FitsTypeOf, container{})
+	c.Assert(cont.AppName, gocheck.Equals, app.GetName())
+	c.Assert(cont.Type, gocheck.Equals, app.GetPlatform())
+	port, err := getPort()
 	c.Assert(err, gocheck.IsNil)
-	container, err := newContainer(app, cmds)
-	c.Assert(err, gocheck.NotNil)
-	defer s.conn.Collection(s.collName).Remove(bson.M{"appname": app.GetName()})
-	c.Assert(container, gocheck.IsNil)
-	c.Assert(w.String(), gocheck.Matches, `(?s).*Error creating container for the app "myapp".*`)
-}
-
-func (s *S) TestNewContainerAddsRoute(c *gocheck.C) {
-	var called bool
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		if strings.Contains(r.URL.Path, "/containers/") {
-			w.Write([]byte(inspectOut))
-		}
-	}))
-	defer server.Close()
-	oldCluster := dockerCluster
-	var err error
-	dockerCluster, err = cluster.New(
-		cluster.Node{ID: "server", Address: server.URL},
-	)
-	c.Assert(err, gocheck.IsNil)
-	defer func() {
-		dockerCluster = oldCluster
-	}()
-	out := fmt.Sprintf(`{
-	"NetworkSettings": {
-		"IpAddress": "10.10.10.10",
-		"IpPrefixLen": 8,
-		"Gateway": "10.65.41.1",
-		"PortMapping": {
-			"%s": "30000"
-		}
-	}
-}`, s.port)
-	fexec := &etesting.FakeExecutor{Output: map[string][][]byte{"*": {[]byte(out)}}}
-	setExecut(fexec)
-	defer setExecut(nil)
-	app := testing.NewFakeApp("myapp", "python", 1)
-	rtesting.FakeRouter.AddBackend(app.GetName())
-	defer rtesting.FakeRouter.RemoveBackend(app.GetName())
-	cmds, err := deployCmds(app, "version")
-	c.Assert(err, gocheck.IsNil)
-	container, err := newContainer(app, cmds)
-	c.Assert(err, gocheck.IsNil)
-	defer s.conn.Collection(s.collName).RemoveId(out)
-	c.Assert(rtesting.FakeRouter.HasRoute(app.GetName(), container.getAddress()), gocheck.Equals, true)
-	c.Assert(called, gocheck.Equals, true)
+	c.Assert(cont.Port, gocheck.Equals, port)
 }
 
 func (s *S) TestGetSSHCommandsDefaultSSHDPath(c *gocheck.C) {
@@ -212,56 +118,6 @@ func (s *S) TestGetPortUndefined(c *gocheck.C) {
 	c.Assert(err, gocheck.NotNil)
 }
 
-func (s *S) TestDockerCreate(c *gocheck.C) {
-	var called bool
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		if strings.Contains(r.URL.Path, "/containers/") {
-			w.Write([]byte(inspectOut))
-		}
-	}))
-	defer server.Close()
-	oldCluster := dockerCluster
-	var err error
-	dockerCluster, err = cluster.New(
-		cluster.Node{ID: "server", Address: server.URL},
-	)
-	c.Assert(err, gocheck.IsNil)
-	defer func() {
-		dockerCluster = oldCluster
-	}()
-	fexec := &etesting.FakeExecutor{}
-	setExecut(fexec)
-	defer setExecut(nil)
-	fexec.Output = map[string][][]byte{
-		"*": {[]byte("c-01")},
-	}
-	container := container{AppName: "app-name", Type: "python"}
-	app := testing.NewFakeApp("app-name", "python", 1)
-	rtesting.FakeRouter.AddBackend(app.GetName())
-	defer rtesting.FakeRouter.RemoveBackend(app.GetName())
-	commands := []string{"docker", "run"}
-	err = container.create(commands)
-	defer container.remove()
-	c.Assert(err, gocheck.IsNil)
-	c.Assert(fexec.ExecutedCmd("docker", commands[1:]), gocheck.Equals, true)
-	c.Assert(container.Status, gocheck.Equals, "created")
-	c.Assert(container.HostPort, gocheck.Equals, "34233")
-	c.Assert(called, gocheck.Equals, true)
-}
-
-func (s *S) TestContainerCreateWithoutHostAddr(c *gocheck.C) {
-	old, _ := config.Get("docker:host-address")
-	defer config.Set("docker:host-address", old)
-	config.Unset("docker:host-address")
-	container := container{AppName: "myapp", Type: "python"}
-	app := testing.NewFakeApp("myapp", "python", 1)
-	commands, err := deployCmds(app, "version")
-	c.Assert(err, gocheck.IsNil)
-	err = container.create(commands)
-	c.Assert(err, gocheck.NotNil)
-}
-
 func (s *S) TestContainerSetStatus(c *gocheck.C) {
 	container := container{ID: "something-300"}
 	s.conn.Collection(s.collName).Insert(container)
@@ -282,109 +138,88 @@ func (s *S) TestContainerSetImage(c *gocheck.C) {
 	c.Assert(c2.Image, gocheck.Equals, "newimage")
 }
 
-func (s *S) TestDockerRemove(c *gocheck.C) {
+func (s *S) newImage() error {
+	opts := dockerClient.PullImageOptions{Repository: "tsuru/python"}
+	client, err := dockerClient.NewClient(s.server.URL())
+	if err != nil {
+		return err
+	}
+	var buffer bytes.Buffer
+	return client.PullImage(opts, &buffer)
+}
+
+func (s *S) newContainer() (*container, error) {
+	container := container{
+		AppName:  "container",
+		ID:       "id",
+		IP:       "10.10.10.10",
+		HostPort: "3333",
+		Port:     "8888",
+	}
+	rtesting.FakeRouter.AddBackend(container.AppName)
+	rtesting.FakeRouter.AddRoute(container.AppName, container.getAddress())
+	client, err := dockerClient.NewClient(s.server.URL())
+	if err != nil {
+		return nil, err
+	}
+	config := docker.Config{
+		Image:     "tsuru/python",
+		Cmd:       []string{"ps"},
+		PortSpecs: []string{"8888"},
+	}
+	c, err := client.CreateContainer(&config)
+	if err != nil {
+		return nil, err
+	}
+	container.ID = c.ID
+	err = s.conn.Collection(s.collName).Insert(&container)
+	if err != nil {
+		return nil, err
+	}
+	return &container, err
+}
+
+func (s *S) TestContainerRemove(c *gocheck.C) {
 	fexec := &etesting.FakeExecutor{}
 	setExecut(fexec)
 	defer setExecut(nil)
-	container := container{AppName: "container", ID: "id", IP: "10.10.10.10", HostPort: "3333"}
-	err := s.conn.Collection(s.collName).Insert(&container)
+	err := s.newImage()
 	c.Assert(err, gocheck.IsNil)
-	rtesting.FakeRouter.AddBackend(container.AppName)
+	container, err := s.newContainer()
+	c.Assert(err, gocheck.IsNil)
 	defer rtesting.FakeRouter.RemoveBackend(container.AppName)
-	rtesting.FakeRouter.AddRoute(container.AppName, container.getAddress())
 	err = container.remove()
 	c.Assert(err, gocheck.IsNil)
-	args := []string{"rm", container.ID}
-	c.Assert(fexec.ExecutedCmd("docker", args), gocheck.Equals, true)
-	args = []string{"-R", container.IP}
+	args := []string{"-R", container.IP}
 	c.Assert(fexec.ExecutedCmd("ssh-keygen", args), gocheck.Equals, true)
-}
-
-func (s *S) TestDockerRemoveRemovesContainerFromDatabase(c *gocheck.C) {
-	fexec := &etesting.FakeExecutor{}
-	setExecut(fexec)
-	defer setExecut(nil)
-	cntnr := container{AppName: "container", ID: "id", HostPort: "3456"}
-	rtesting.FakeRouter.AddBackend(cntnr.AppName)
-	defer rtesting.FakeRouter.RemoveBackend(cntnr.AppName)
-	rtesting.FakeRouter.AddRoute(cntnr.AppName, cntnr.getAddress())
-	err := s.conn.Collection(s.collName).Insert(&cntnr)
-	c.Assert(err, gocheck.IsNil)
-	err = cntnr.remove()
-	c.Assert(err, gocheck.IsNil)
 	coll := s.conn.Collection(s.collName)
-	coll.FindId("id")
-	err = coll.FindId(cntnr.ID).One(&cntnr)
+	err = coll.FindId(container.ID).One(&container)
 	c.Assert(err, gocheck.NotNil)
 	c.Assert(err.Error(), gocheck.Equals, "not found")
+	c.Assert(rtesting.FakeRouter.HasRoute(container.AppName, container.getAddress()), gocheck.Equals, false)
 }
 
-func (s *S) TestDockerRemoveRemovesRoute(c *gocheck.C) {
-	fexec := &etesting.FakeExecutor{}
-	setExecut(fexec)
-	defer setExecut(nil)
-	app := testing.NewFakeApp("myapp", "python", 1)
-	cntnr := container{AppName: app.GetName(), ID: "id", IP: "10.10.10.10", HostPort: "3456"}
-	rtesting.FakeRouter.AddBackend(app.GetName())
-	defer rtesting.FakeRouter.RemoveBackend(app.GetName())
-	rtesting.FakeRouter.AddRoute(app.GetName(), cntnr.getAddress())
-	err := s.conn.Collection(s.collName).Insert(&cntnr)
-	err = cntnr.remove()
+func (s *S) TestContainerIP(c *gocheck.C) {
+	err := s.newImage()
 	c.Assert(err, gocheck.IsNil)
-	c.Assert(rtesting.FakeRouter.HasRoute(app.GetName(), cntnr.getAddress()), gocheck.Equals, false)
-}
-
-func (s *S) TestContainerIPRunsDockerInspectCommand(c *gocheck.C) {
-	var called bool
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		if strings.Contains(r.URL.Path, "/containers/") {
-			w.Write([]byte(inspectOut))
-		}
-	}))
-	defer server.Close()
-	oldCluster := dockerCluster
-	var err error
-	dockerCluster, err = cluster.New(
-		cluster.Node{ID: "server", Address: server.URL},
-	)
+	cont, err := s.newContainer()
 	c.Assert(err, gocheck.IsNil)
-	defer func() {
-		dockerCluster = oldCluster
-	}()
-	fexec := &etesting.FakeExecutor{}
-	setExecut(fexec)
-	defer setExecut(nil)
-	cont := container{AppName: "vm1", ID: "id"}
+	defer cont.remove()
 	ip, err := cont.ip()
 	c.Assert(err, gocheck.IsNil)
-	c.Assert(ip, gocheck.Equals, "10.10.10.10")
-	c.Assert(called, gocheck.Equals, true)
+	c.Assert(ip, gocheck.Not(gocheck.Equals), "")
 }
 
-func (s *S) TestContainerHostPortReturnsPortFromDockerInspect(c *gocheck.C) {
-	var called bool
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		if strings.Contains(r.URL.Path, "/containers/") {
-			w.Write([]byte(inspectOut))
-		}
-	}))
-	defer server.Close()
-	oldCluster := dockerCluster
-	var err error
-	dockerCluster, err = cluster.New(
-		cluster.Node{ID: "server", Address: server.URL},
-	)
+func (s *S) TestContainerHostPort(c *gocheck.C) {
+	err := s.newImage()
 	c.Assert(err, gocheck.IsNil)
-	defer func() {
-		dockerCluster = oldCluster
-	}()
-	container := container{ID: "c-01", Port: "8888"}
-	port, err := container.hostPort()
+	cont, err := s.newContainer()
 	c.Assert(err, gocheck.IsNil)
-	c.Assert(port, gocheck.Equals, "34233")
-	c.Assert(called, gocheck.Equals, true)
+	defer rtesting.FakeRouter.RemoveBackend(cont.AppName)
+	defer cont.remove()
+	port, err := cont.hostPort()
+	c.Assert(err, gocheck.IsNil)
+	c.Assert(port, gocheck.Not(gocheck.Equals), "")
 }
 
 func (s *S) TestContainerHostPortNoPort(c *gocheck.C) {
@@ -412,14 +247,14 @@ func (s *S) TestContainerHostPortNotFound(c *gocheck.C) {
 		}
 	}))
 	defer server.Close()
-	oldCluster := dockerCluster
+	oldCluster := dockerCluster()
 	var err error
-	dockerCluster, err = cluster.New(
+	dCluster, err = cluster.New(
 		cluster.Node{ID: "server", Address: server.URL},
 	)
 	c.Assert(err, gocheck.IsNil)
 	defer func() {
-		dockerCluster = oldCluster
+		dCluster = oldCluster
 	}()
 	container := container{ID: "c-01", Port: "8888"}
 	port, err := container.hostPort()
@@ -565,140 +400,75 @@ func (s *S) TestGetImageFromDatabase(c *gocheck.C) {
 	c.Assert(img, gocheck.Equals, "someimageid")
 }
 
-func (s *S) TestBinary(c *gocheck.C) {
-	bin, _ := config.Get("docker:binary")
-	binary, err := binary()
-	c.Assert(err, gocheck.IsNil)
-	c.Assert(binary, gocheck.Equals, bin)
-}
-
 func (s *S) TestContainerCommit(c *gocheck.C) {
-	var called bool
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		w.Write([]byte(`{"Id":"imageid"}`))
-	}))
-	defer server.Close()
-	oldCluster := dockerCluster
-	var err error
-	dockerCluster, err = cluster.New(
-		cluster.Node{ID: "server", Address: server.URL},
-	)
+	err := s.newImage()
 	c.Assert(err, gocheck.IsNil)
-	defer func() {
-		dockerCluster = oldCluster
-	}()
-	cont := container{ID: "someid", Type: "python", AppName: "myapp"}
+	cont, err := s.newContainer()
+	c.Assert(err, gocheck.IsNil)
+	defer cont.remove()
+	defer rtesting.FakeRouter.RemoveBackend(cont.AppName)
 	imageId, err := cont.commit()
 	c.Assert(err, gocheck.IsNil)
-	c.Assert(imageId, gocheck.Equals, "imageid")
-	c.Assert(called, gocheck.Equals, true)
+	c.Assert(imageId, gocheck.Not(gocheck.Equals), "")
 }
 
 func (s *S) TestRemoveImage(c *gocheck.C) {
-	fexec := &etesting.FakeExecutor{}
-	setExecut(fexec)
-	defer setExecut(nil)
-	imageId := "image-id"
-	err := removeImage(imageId)
+	err := s.newImage()
 	c.Assert(err, gocheck.IsNil)
-	args := []string{"rmi", imageId}
-	c.Assert(fexec.ExecutedCmd("docker", args), gocheck.Equals, true)
+	client, err := dockerClient.NewClient(s.server.URL())
+	c.Assert(err, gocheck.IsNil)
+	images, err := client.ListImages(true)
+	c.Assert(err, gocheck.IsNil)
+	err = removeImage(images[0].ID)
+	c.Assert(err, gocheck.IsNil)
 }
 
 func (s *S) TestContainerDeploy(c *gocheck.C) {
-	var called int
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called++
-		if strings.Contains(r.URL.Path, "/containers/") {
-			w.Write([]byte(inspectOut))
+	go func() {
+		client, err := dockerClient.NewClient(s.server.URL())
+		if err != nil {
+			return
 		}
-		if strings.Contains(r.URL.Path, "/commit") {
-			w.Write([]byte(`{"Id":"someimageid"}`))
+		for {
+			opts := dockerClient.ListContainersOptions{All: true}
+			containers, err := client.ListContainers(opts)
+			if err != nil {
+				return
+			}
+			if len(containers) > 0 {
+				for _, cont := range containers {
+					client.StopContainer(cont.ID, 1)
+				}
+				return
+			}
 		}
-	}))
-	defer server.Close()
-	oldCluster := dockerCluster
-	var err error
-	dockerCluster, err = cluster.New(
-		cluster.Node{ID: "server", Address: server.URL},
-	)
-	c.Assert(err, gocheck.IsNil)
-	defer func() {
-		dockerCluster = oldCluster
 	}()
-	id := "945132e7b4c9"
-	sshCmd := "/var/lib/tsuru/add-key key-content && /usr/sbin/sshd -D"
-	runCmd := fmt.Sprintf("run -d -t -p %s tsuru/python /bin/bash -c %s",
-		s.port, sshCmd)
-	app := testing.NewFakeApp("myapp", "python", 1)
-	imageId := getImage(app)
-	cmds, err := deployCmds(app, "ff13e")
+	err := s.newImage()
 	c.Assert(err, gocheck.IsNil)
-	deployCmds := strings.Join(cmds[1:], " ")
-	logCmd := fmt.Sprintf("logs %s", id)
-	logOut := "log out"
-	out := map[string][][]byte{
-		runCmd:     {[]byte(id)},
-		deployCmds: {[]byte(id)},
-		logCmd:     {[]byte(logOut)},
-	}
-	fexec := &etesting.FakeExecutor{Output: out}
-	setExecut(fexec)
-	defer setExecut(nil)
-	defer s.conn.Collection(s.collName).RemoveId(id)
+	app := testing.NewFakeApp("myapp", "python", 1)
 	rtesting.FakeRouter.AddBackend(app.GetName())
 	defer rtesting.FakeRouter.RemoveBackend(app.GetName())
 	var buf bytes.Buffer
-	imageId, err = deploy(app, "ff13e", &buf)
+	_, err = deploy(app, "ff13e", &buf)
 	c.Assert(err, gocheck.IsNil)
-	c.Assert(imageId, gocheck.Equals, "someimageid")
-	c.Assert(buf.String(), gocheck.Equals, logOut)
-	args := []string{"logs", id}
-	c.Assert(fexec.ExecutedCmd("docker", args), gocheck.Equals, true)
-	c.Assert(called, gocheck.Equals, 4)
 }
 
 func (s *S) TestStart(c *gocheck.C) {
-	var called bool
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		if strings.Contains(r.URL.Path, "/containers/") {
-			w.Write([]byte(inspectOut))
-		}
-	}))
-	defer server.Close()
-	oldCluster := dockerCluster
-	var err error
-	dockerCluster, err = cluster.New(
-		cluster.Node{ID: "server", Address: server.URL},
-	)
+	err := s.newImage()
 	c.Assert(err, gocheck.IsNil)
-	defer func() {
-		dockerCluster = oldCluster
-	}()
-	id := "945132e7b4c9"
 	app := testing.NewFakeApp("myapp", "python", 1)
 	imageId := getImage(app)
-	cmds, err := runCmds(imageId)
-	c.Assert(err, gocheck.IsNil)
-	runCmds := strings.Join(cmds[1:], " ")
-	out := map[string][][]byte{runCmds: {[]byte(id)}}
-	fexec := &etesting.FakeExecutor{Output: out}
-	setExecut(fexec)
-	defer setExecut(nil)
-	defer s.conn.Collection(s.collName).RemoveId(id)
 	rtesting.FakeRouter.AddBackend(app.GetName())
 	defer rtesting.FakeRouter.RemoveBackend(app.GetName())
 	var buf bytes.Buffer
 	cont, err := start(app, imageId, &buf)
 	c.Assert(err, gocheck.IsNil)
-	c.Assert(cont.ID, gocheck.Equals, id)
+	defer cont.remove()
+	c.Assert(cont.ID, gocheck.Not(gocheck.Equals), "")
 	cont2, err := getContainer(cont.ID)
 	c.Assert(err, gocheck.IsNil)
 	c.Assert(cont2.Image, gocheck.Equals, imageId)
 	c.Assert(cont2.Status, gocheck.Equals, "running")
-	c.Assert(called, gocheck.Equals, true)
 }
 
 func (s *S) TestContainerRunCmdError(c *gocheck.C) {
@@ -719,66 +489,45 @@ func (s *S) TestContainerRunCmdError(c *gocheck.C) {
 }
 
 func (s *S) TestContainerStopped(c *gocheck.C) {
-	inspectOut := `
-    {
-	"State": {
-		"Running": false,
-		"Pid": 0,
-		"ExitCode": 0,
-		"StartedAt": "2013-06-13T20:59:31.699407Z",
-		"Ghost": false
-	},
-	"NetworkSettings": {
-		"IpAddress": "10.10.10.10",
-		"IpPrefixLen": 8,
-		"Gateway": "10.65.41.1",
-		"PortMapping": {"8888": "34233"}
-	}
-}`
-	var called int
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called++
-		if strings.Contains(r.URL.Path, "/containers/") {
-			w.Write([]byte(inspectOut))
-		}
-	}))
-	defer server.Close()
-	oldCluster := dockerCluster
-	var err error
-	dockerCluster, err = cluster.New(
-		cluster.Node{ID: "server", Address: server.URL},
-	)
+	err := s.newImage()
 	c.Assert(err, gocheck.IsNil)
-	defer func() {
-		dockerCluster = oldCluster
-	}()
-	cont := container{ID: "someid", Type: "python", AppName: "myapp"}
+	cont, err := s.newContainer()
+	c.Assert(err, gocheck.IsNil)
+	defer cont.remove()
+	defer rtesting.FakeRouter.RemoveBackend(cont.AppName)
 	result, err := cont.stopped()
 	c.Assert(err, gocheck.IsNil)
 	c.Assert(result, gocheck.Equals, true)
-	c.Assert(called, gocheck.Equals, 1)
 }
 
 func (s *S) TestContainerLogs(c *gocheck.C) {
-	fexec := &etesting.FakeExecutor{
-		Output: map[string][][]byte{
-			"*": {[]byte("some logs")},
-		},
-	}
-	setExecut(fexec)
-	defer setExecut(nil)
-	cont := container{ID: "someid", Type: "python", AppName: "myapp"}
-	result, err := cont.logs()
+	err := s.newImage()
 	c.Assert(err, gocheck.IsNil)
-	c.Assert(result, gocheck.Equals, "some logs")
-	args := []string{"logs", "someid"}
-	c.Assert(fexec.ExecutedCmd("docker", args), gocheck.Equals, true)
+	cont, err := s.newContainer()
+	c.Assert(err, gocheck.IsNil)
+	defer cont.remove()
+	defer rtesting.FakeRouter.RemoveBackend(cont.AppName)
+	var buff bytes.Buffer
+	err = cont.logs(&buff)
+	c.Assert(err, gocheck.IsNil)
+	c.Assert(buff.String(), gocheck.Not(gocheck.Equals), "")
 }
 
 func (s *S) TestDockerCluster(c *gocheck.C) {
-	expected, err := cluster.New(
-		cluster.Node{ID: "server", Address: "http://localhost:4243"},
+	config.Set("docker:servers", []string{"http://localhost:4243", "http://10.10.10.10:4243"})
+	expected, _ := cluster.New(
+		cluster.Node{ID: "server0", Address: "http://localhost:4243"},
+		cluster.Node{ID: "server1", Address: "http://10.10.10.10:4243"},
 	)
-	c.Assert(err, gocheck.IsNil)
-	c.Assert(dockerCluster, gocheck.DeepEquals, expected)
+	oldDockerCluster := dCluster
+	cmutext.Lock()
+	dCluster = nil
+	cmutext.Unlock()
+	defer func() {
+		cmutext.Lock()
+		defer cmutext.Unlock()
+		dCluster = oldDockerCluster
+	}()
+	cluster := dockerCluster()
+	c.Assert(cluster, gocheck.DeepEquals, expected)
 }

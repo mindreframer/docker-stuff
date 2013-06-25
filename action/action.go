@@ -81,6 +81,10 @@ func NewPipeline(actions ...*Action) *Pipeline {
 	return &Pipeline{actions: actions}
 }
 
+func (p *Pipeline) Result() Result {
+	return p.actions[len(p.actions)-1].result
+}
+
 // Execute executes the pipeline.
 //
 // The execution starts in the forward phase, calling the Forward function of
@@ -114,6 +118,7 @@ func (p *Pipeline) Execute(params ...interface{}) error {
 			fwCtx.Previous = r
 		}
 		if err != nil {
+			log.Printf("[pipeline] error running the Forward for the %s action - %s", a.Name, err.Error())
 			p.rollback(i-1, params)
 			return err
 		}
