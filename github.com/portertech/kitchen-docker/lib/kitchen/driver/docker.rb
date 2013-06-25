@@ -34,6 +34,7 @@ module Kitchen
       default_config :username,             'kitchen'
       default_config :password,             'kitchen'
       default_config :require_chef_omnibus, true
+      default_config :remove_images,        false
 
       def verify_dependencies
         run_command('docker > /dev/null', :quiet => true)
@@ -52,7 +53,9 @@ module Kitchen
 
       def destroy(state)
         rm_container(state) if state[:container_id]
-        rm_image(state) if state[:image_id]
+        if config[:remove_images] && state[:image_id]
+          rm_image(state)
+        end
       end
 
       protected
@@ -64,7 +67,7 @@ module Kitchen
           <<-eos
             ENV DEBIAN_FRONTEND noninteractive
             RUN apt-get update
-            RUN apt-get install -y sudo openssh-server curl
+            RUN apt-get install -y sudo openssh-server curl lsb-release
             RUN dpkg-divert --local --rename --add /sbin/initctl
             RUN ln -s /bin/true /sbin/initctl
           eos
@@ -93,7 +96,9 @@ module Kitchen
 
       def parse_image_id(output)
         output.each_line do |line|
-          return line.split(/\s+/).last if line =~ /image id/i
+          if line =~ /image id|build successful|successfully built/i
+            return line.split(/\s+/).last
+          end
         end
         raise ActionFailed,
         'Could not parse Docker build output for image ID'
@@ -126,8 +131,9 @@ module Kitchen
 
       def parse_container_ip(output)
         begin
-          info = JSON.parse(output)
-          info['NetworkSettings']['IpAddress']
+          info = Array(JSON.parse(output)).first
+          settings = info['NetworkSettings']
+          settings['IpAddress'] || settings['IPAddress']
         rescue
           raise ActionFailed,
           'Could not parse Docker inspect output for container IP address'
@@ -147,6 +153,7 @@ module Kitchen
 
       def rm_container(state)
         container_id = state[:container_id]
+        run_command("docker stop #{container_id}")
         run_command("docker rm #{container_id}")
       end
 
