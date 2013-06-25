@@ -31,23 +31,23 @@ Articles:
 <!-- PROJECTS_LIST_START -->
     crosbymichael/dockerui:
       A web interface for docker.  http://docker.io
-       27 commits, 127 stars, 4 forks
+       54 commits, 141 stars, 6 forks
 
     dotcloud/docker:
       Docker - the Linux container runtime
-       1000+ commits, 3,359 stars, 307 forks
+       1000+ commits, 3,554 stars, 329 forks
 
     dotcloud/docker-registry:
       Registry server for Docker (hosting/delivering of repositories and images)
-       36 commits, 43 stars, 8 forks
+       36 commits, 44 stars, 9 forks
 
     dotcloud/dockerlite:
       Lightweight virtualization system based on LXC and BTRFS. See dotcloud/docker.
-       14 commits, 18 stars, 3 forks
+       14 commits, 23 stars, 3 forks
 
     dotcloud/openstack-docker:
       Nova driver and Glance backend to use Docker inside OpenStack
-       27 commits, 105 stars, 5 forks
+       30 commits, 110 stars, 6 forks
 
     dreid/docker-cookbook:
       A docker.io cookbook that can install docker, manage images, and try to set up an AUFS kernel.
@@ -59,29 +59,29 @@ Articles:
 
     ehazlett/shipyard:
       Docker web interface
-       18 commits, 33 stars, 3 forks
+       27 commits, 95 stars, 5 forks
 
     fsouza/go-dockerclient:
       HTTP client for the Docker remote API.
-       115 commits, 1 stars, 1 forks
+       119 commits, 2 stars, 1 forks
 
     globocom/docker-cluster:
       Cluster support for Docker,  using the remote API.
-       43 commits, 3 stars, 0 forks
+       43 commits, 4 stars, 0 forks
 
     globocom/tsuru:
       Open source Platform as a Service.
-       1000+ commits, 532 stars, 39 forks
+       1000+ commits, 537 stars, 39 forks
 
     progrium/buildstep:
       Buildstep uses Docker and Buildpacks to build applications like Heroku
-       50 commits, 88 stars, 9 forks
+       64 commits, 129 stars, 22 forks
 
     progrium/dokku:
       Docker powered mini-Heroku in less than 100 lines of Bash
-       63 commits, 444 stars, 28 forks
+       134 commits, 1,169 stars, 75 forks
 
     portertech/kitchen-docker:
       A Test Kitchen Driver for Docker
-       29 commits, 11 stars, 4 forks
+       39 commits, 16 stars, 6 forks
 <!-- PROJECTS_LIST_END -->
