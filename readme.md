@@ -1,7 +1,18 @@
 # Shipyard
 Shipyard is a web UI for http://docker.io
 
-# Setup
+To run the latest version on port 8000:
+
+`docker run -p :8000 ehazlett/shipyard`
+
+Or to run on a custom port (leave the `-p` option off to get random port):
+
+`docker run -p 8005:8000 ehazlett/shipyard`
+
+Username: admin
+Password: shipyard
+
+# Dev Setup
 Shipyard needs Redis for caching and queueing.  By default, it assumes Redis
 is running on localhost.
 
@@ -10,7 +21,7 @@ is running on localhost.
 * `python manage.py migrate`
 * `python manage.py createsuperuser`
 * `python manage.py runserver`
-* `python manage.py rqworker` (in another terminal)
+* `python manage.py rqworker shipyard` (in another terminal)
 * Open browser to http://localhost:8000
 * Add a host (i.e. 127.0.0.1 for local docker)
 
@@ -19,7 +30,10 @@ is running on localhost.
 * Multiple host support
 * Create / Delete containers
 * View Images
+* Build Images (via uploaded Dockerfile or URL)
 * Import repositories
+* Private containers
+* Container metadata (description, etc.)
 * ...more coming...
 
 # Screenshots
