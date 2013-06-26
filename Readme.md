@@ -20,6 +20,7 @@
 
 
 Articles:
+  - [Lightweight Virtualization with LXC, by Jerome Petazzoni, 2013/06 ](http://www.ciecloud.org/2013/subject/07-track06-Jerome%20Petazzoni.pdf)
   - [Deploy Java Apps With Docker = Awesome, 2013.06](http://blogs.atlassian.com/2013/06/deploy-java-apps-with-docker-awesome/)
   - [Unionize: network superpowers for your docker containers](https://gist.github.com/jpetazzo/5493295) - http://blog.docker.io/2013/04/unionize-network-superpowers-for-your-docker-containers/
   - http://www.activestate.com/blog/2013/06/solomon-hykes-explains-docker
