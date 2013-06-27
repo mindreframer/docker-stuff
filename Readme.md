@@ -38,13 +38,13 @@ Articles:
       A web interface for docker.  http://docker.io
        54 commits, 141 stars, 6 forks
 
-    dotcloud/docker:
-      Docker - the Linux container runtime
-       1000+ commits, 3,554 stars, 329 forks
-
     dotcloud/docker-registry:
       Registry server for Docker (hosting/delivering of repositories and images)
        36 commits, 44 stars, 9 forks
+
+    dotcloud/docker:
+      Docker - the Linux container runtime
+       1000+ commits, 3,554 stars, 329 forks
 
     dotcloud/dockerlite:
       Lightweight virtualization system based on LXC and BTRFS. See dotcloud/docker.
@@ -86,6 +86,14 @@ Articles:
       Puppet module that installs and configures docker registry with opinionated defaults.
        12 commits, 1 stars, 0 forks
 
+    justone/docker-mongodb:
+      Dockerized MongoDB (with SSHD)
+       3 commits, 1 stars, 0 forks
+
+    portertech/kitchen-docker:
+      A Test Kitchen Driver for Docker
+       39 commits, 16 stars, 6 forks
+
     progrium/buildstep:
       Buildstep uses Docker and Buildpacks to build applications like Heroku
        64 commits, 129 stars, 22 forks
@@ -93,10 +101,6 @@ Articles:
     progrium/dokku:
       Docker powered mini-Heroku in less than 100 lines of Bash
        134 commits, 1,169 stars, 75 forks
-
-    portertech/kitchen-docker:
-      A Test Kitchen Driver for Docker
-       39 commits, 16 stars, 6 forks
 
     ptone/jiffylab:
       zero configuration Python/Unix web based teaching env
@@ -109,8 +113,4 @@ Articles:
     swipely/docker-api:
       A lightweight Docker API for Ruby
        80 commits, 3 stars, 0 forks
-
-    justone/docker-mongodb:
-      Dockerized MongoDB (with SSHD)
-       3 commits, 1 stars, 0 forks
 <!-- PROJECTS_LIST_END -->
