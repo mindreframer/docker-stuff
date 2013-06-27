@@ -30,6 +30,10 @@ Articles:
 
 
 <!-- PROJECTS_LIST_START -->
+    alphagov/gantry:
+      Deployment automation for Docker
+       34 commits, 1 stars, 2 forks
+
     crosbymichael/dockerui:
       A web interface for docker.  http://docker.io
        54 commits, 141 stars, 6 forks
@@ -93,6 +97,14 @@ Articles:
     portertech/kitchen-docker:
       A Test Kitchen Driver for Docker
        39 commits, 16 stars, 6 forks
+
+    ptone/jiffylab:
+      zero configuration Python/Unix web based teaching env
+       12 commits, 13 stars, 1 forks
+
+    shingara/dockerfiles:
+      Some DockerFile I create
+       4 commits, 1 stars, 0 forks
 
     swipely/docker-api:
       A lightweight Docker API for Ruby
