@@ -94,6 +94,10 @@ Articles:
       Dockerized MongoDB (with SSHD)
        3 commits, 2 stars, 0 forks
 
+    kstaken/dockermix:
+      A simple tool to deploy multiple docker containers.
+       37 commits, 0 stars, 0 forks
+
     portertech/kitchen-docker:
       A Test Kitchen Driver for Docker
        43 commits, 21 stars, 6 forks
