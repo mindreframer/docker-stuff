@@ -34,6 +34,10 @@ Articles:
       Deployment automation for Docker
        34 commits, 1 stars, 2 forks
 
+    aschmidt75/haproxy-docker-config:
+      Configuring haproxy to automatically redirect to docker instances
+       15 commits, 1 stars, 0 forks
+
     crosbymichael/dockerui:
       A web interface for docker. http://docker.io
        54 commits, 146 stars, 7 forks
