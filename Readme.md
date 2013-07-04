@@ -94,6 +94,10 @@ Articles:
       Dockerized MongoDB (with SSHD)
        3 commits, last change: 2013-06-12 21:32:17, 2 stars, 0 forks
 
+    kstaken/dockerfile-examples:
+      Some example dockerfiles for use with Docker
+       8 commits, last change: 2013-07-03 17:16:45, 0 stars, 1 forks
+
     kstaken/dockermix:
       A simple tool to deploy multiple docker containers.
        37 commits, last change: 2013-07-02 13:11:59, 0 stars, 0 forks
