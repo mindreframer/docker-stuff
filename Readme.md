@@ -36,27 +36,27 @@ Articles:
 
     aschmidt75/haproxy-docker-config:
       Configuring haproxy to automatically redirect to docker instances
-       15 commits, last change: 2013-07-01 23:40:38, 1 stars, 0 forks
+       16 commits, last change: 2013-07-04 06:56:46, 3 stars, 0 forks
 
     crosbymichael/dockerui:
       A web interface for docker. http://docker.io
-       54 commits, last change: 2013-06-23 19:32:50, 148 stars, 8 forks
+       54 commits, last change: 2013-06-23 19:32:50, 163 stars, 10 forks
 
     dotcloud/docker-registry:
       Registry server for Docker (hosting/delivering of repositories and images)
-       63 commits, last change: 2013-07-02 13:44:47, 47 stars, 11 forks
+       65 commits, last change: 2013-07-08 16:58:06, 54 stars, 14 forks
 
     dotcloud/docker:
       Docker - the Linux container runtime
-       1000+ commits, last change: 2013-07-02 11:42:44, 3,693 stars, 348 forks
+       1000+ commits, last change: 2013-07-10 07:52:30, 3,852 stars, 365 forks
 
     dotcloud/dockerlite:
       Lightweight virtualization system based on LXC and BTRFS. See dotcloud/docker.
-       14 commits, last change: 2013-05-09 09:23:01, 24 stars, 3 forks
+       14 commits, last change: 2013-05-09 09:23:01, 288 stars, 19 forks
 
     dotcloud/openstack-docker:
       Nova driver and Glance backend to use Docker inside OpenStack
-       34 commits, last change: 2013-07-01 15:14:50, 115 stars, 7 forks
+       34 commits, last change: 2013-07-01 15:14:50, 117 stars, 7 forks
 
     dreid/docker-cookbook:
       A docker.io cookbook that can install docker, manage images, and try to set up an AUFS kernel.
@@ -68,11 +68,11 @@ Articles:
 
     ehazlett/shipyard:
       Docker web interface
-       28 commits, last change: 2013-06-25 23:26:22, 134 stars, 6 forks
+       34 commits, last change: 2013-07-09 20:34:29, 150 stars, 7 forks
 
     fsouza/go-dockerclient:
       HTTP client for the Docker remote API.
-       131 commits, last change: 2013-07-02 10:09:53, 2 stars, 1 forks
+       135 commits, last change: 2013-07-10 07:17:22, 2 stars, 1 forks
 
     georgebashi/docker-simpleregistry:
 
@@ -80,11 +80,11 @@ Articles:
 
     globocom/docker-cluster:
       Cluster support for Docker, using the remote API.
-       53 commits, last change: 2013-06-28 14:07:07, 5 stars, 0 forks
+       77 commits, last change: 2013-07-10 08:17:21, 5 stars, 0 forks
 
     globocom/tsuru:
       Open source Platform as a Service.
-       1000+ commits, last change: 2013-07-02 12:22:58, 543 stars, 41 forks
+       1000+ commits, last change: 2013-07-10 07:54:36, 549 stars, 43 forks
 
     jamescarr/puppet-docker-registry:
       Puppet module that installs and configures docker registry with opinionated defaults.
@@ -100,31 +100,31 @@ Articles:
 
     kstaken/dockerfile-examples:
       Some example dockerfiles for use with Docker
-       8 commits, last change: 2013-07-03 17:16:45, 0 stars, 1 forks
+       17 commits, last change: 2013-07-08 17:51:34, 3 stars, 1 forks
 
     kstaken/dockermix:
-      A simple tool to deploy multiple docker containers.
-       37 commits, last change: 2013-07-02 13:11:59, 0 stars, 0 forks
+      Deploy and manage multi-container Docker environments
+       48 commits, last change: 2013-07-09 10:15:17, 12 stars, 0 forks
 
     kstaken/dockermix:
-      A simple tool to deploy multiple docker containers.
-       37 commits, last change: 2013-07-02 13:11:59, 0 stars, 0 forks
+      Deploy and manage multi-container Docker environments
+       48 commits, last change: 2013-07-09 10:15:17, 12 stars, 0 forks
 
     portertech/kitchen-docker:
       A Test Kitchen Driver for Docker
-       45 commits, last change: 2013-07-01 11:21:24, 21 stars, 6 forks
+       45 commits, last change: 2013-07-01 11:21:24, 22 stars, 6 forks
 
     progrium/buildstep:
       Buildstep uses Docker and Buildpacks to build applications like Heroku
-       73 commits, last change: 2013-06-29 17:10:20, 151 stars, 28 forks
+       75 commits, last change: 2013-07-04 23:27:22, 160 stars, 28 forks
 
     progrium/dokku:
       Docker powered mini-Heroku in less than 100 lines of Bash
-       188 commits, last change: 2013-07-02 12:54:58, 1,309 stars, 85 forks
+       206 commits, last change: 2013-07-07 18:12:39, 1,383 stars, 94 forks
 
     ptone/jiffylab:
       zero configuration Python/Unix web based teaching env
-       12 commits, last change: 2013-06-27 02:04:18, 22 stars, 1 forks
+       12 commits, last change: 2013-06-27 02:04:18, 25 stars, 2 forks
 
     shingara/dockerfiles:
       Some DockerFile I create
@@ -132,5 +132,5 @@ Articles:
 
     swipely/docker-api:
       A lightweight Ruby client for the Docker Remote API
-       98 commits, last change: 2013-06-27 11:43:19, 4 stars, 1 forks
+       110 commits, last change: 2013-07-05 19:30:37, 6 stars, 2 forks
 <!-- PROJECTS_LIST_END -->
