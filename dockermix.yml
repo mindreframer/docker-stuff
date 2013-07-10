@@ -1,9 +1,10 @@
 containers:
   test_server_1: 
     base_image: ubuntu
-    command: ps aux
+    command: ls -la
+    hostname: test_server
     ports: 
-      - '8080'  
-  test_server_2: 
+      - '80'  
+  test_server_2:
     base_image: ubuntu
-    command: ls -l    
+    command: ps aux
