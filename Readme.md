@@ -60,7 +60,7 @@ Articles:
 
     dreid/docker-cookbook:
       A docker.io cookbook that can install docker, manage images, and try to set up an AUFS kernel.
-       2 commits, last change: , 8 stars, 0 forks
+       2 commits, last change: 2013-05-19 09:47:20, 9 stars, 0 forks
 
     dynport/dockland:
       Yet another docker web ui
