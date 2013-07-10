@@ -90,6 +90,10 @@ Articles:
       Puppet module that installs and configures docker registry with opinionated defaults.
        12 commits, last change: , 1 stars, 0 forks
 
+    jamescarr/puppet-docker-registry:
+      Puppet module that installs and configures docker registry with opinionated defaults.
+       12 commits, last change: , 1 stars, 0 forks
+
     justone/docker-mongodb:
       Dockerized MongoDB (with SSHD)
        3 commits, last change: 2013-06-12 21:32:17, 2 stars, 0 forks
