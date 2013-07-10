@@ -23,3 +23,4 @@ https://github.com/progrium/dokku.git
 https://github.com/ptone/jiffylab.git
 https://github.com/shingara/dockerfiles.git
 https://github.com/swipely/docker-api.git
+https://github.com/jamescarr/puppet-docker-registry.git
