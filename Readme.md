@@ -102,6 +102,10 @@ Articles:
       A simple tool to deploy multiple docker containers.
        37 commits, last change: 2013-07-02 13:11:59, 0 stars, 0 forks
 
+    kstaken/dockermix:
+      A simple tool to deploy multiple docker containers.
+       37 commits, last change: 2013-07-02 13:11:59, 0 stars, 0 forks
+
     portertech/kitchen-docker:
       A Test Kitchen Driver for Docker
        45 commits, last change: 2013-07-01 11:21:24, 21 stars, 6 forks
