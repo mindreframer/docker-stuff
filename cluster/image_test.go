@@ -7,6 +7,7 @@ package cluster
 import (
 	"bytes"
 	"github.com/fsouza/go-dockerclient"
+	"github.com/globocom/tsuru/safe"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -24,7 +25,7 @@ func TestRemoveImage(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer server2.Close()
-	cluster, err := New(
+	cluster, err := New(nil,
 		Node{ID: "handler0", Address: server1.URL},
 		Node{ID: "handler1", Address: server2.URL},
 	)
@@ -50,7 +51,7 @@ func TestRemoveImageNotFound(t *testing.T) {
 		http.Error(w, "No such image", http.StatusNotFound)
 	}))
 	defer server2.Close()
-	cluster, err := New(
+	cluster, err := New(nil,
 		Node{ID: "handler0", Address: server1.URL},
 		Node{ID: "handler1", Address: server2.URL},
 	)
@@ -60,7 +61,7 @@ func TestRemoveImageNotFound(t *testing.T) {
 	name := "tsuru/python"
 	err = cluster.RemoveImage(name)
 	if err != docker.ErrNoSuchImage {
-		t.Errorf("RemoveImage(%q): wrong error. Want %#v. Got %#v.", docker.ErrNoSuchImage, err)
+		t.Errorf("RemoveImage(%q): wrong error. Want %#v. Got %#v.", name, docker.ErrNoSuchImage, err)
 	}
 }
 
@@ -73,8 +74,8 @@ func TestPullImage(t *testing.T) {
 		w.Write([]byte("Pulling from 2!"))
 	}))
 	defer server2.Close()
-	var buf bytes.Buffer
-	cluster, err := New(
+	var buf safe.Buffer
+	cluster, err := New(nil,
 		Node{ID: "handler0", Address: server1.URL},
 		Node{ID: "handler1", Address: server2.URL},
 	)
@@ -100,7 +101,7 @@ func TestPullImageNotFound(t *testing.T) {
 		http.Error(w, "No such image", http.StatusNotFound)
 	}))
 	defer server2.Close()
-	cluster, err := New(
+	cluster, err := New(nil,
 		Node{ID: "handler0", Address: server1.URL},
 		Node{ID: "handler1", Address: server2.URL},
 	)
@@ -123,8 +124,8 @@ func TestPushImage(t *testing.T) {
 		w.Write([]byte("Pushing to server 2!"))
 	}))
 	defer server2.Close()
-	var buf bytes.Buffer
-	cluster, err := New(
+	var buf safe.Buffer
+	cluster, err := New(nil,
 		Node{ID: "handler0", Address: server1.URL},
 		Node{ID: "handler1", Address: server2.URL},
 	)
@@ -147,7 +148,7 @@ func TestPushImageNotFound(t *testing.T) {
 		http.Error(w, "No such image", http.StatusNotFound)
 	}))
 	defer server2.Close()
-	cluster, err := New(
+	cluster, err := New(nil,
 		Node{ID: "handler0", Address: server1.URL},
 		Node{ID: "handler1", Address: server2.URL},
 	)
