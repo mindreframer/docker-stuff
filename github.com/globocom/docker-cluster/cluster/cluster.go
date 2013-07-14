@@ -8,11 +8,31 @@
 package cluster
 
 import (
+	"errors"
 	"github.com/fsouza/go-dockerclient"
 	"net/http"
+	"reflect"
 	"sync"
-	"sync/atomic"
 )
+
+// ErrUnknownNode is the error returned when an unknown node is stored in the
+// storage. This error means some kind of inconsistence between the storage and
+// the cluster.
+var ErrUnknownNode = errors.New("Unknown node")
+
+// ErrImmutableCluster is the error returned by Register when the cluster is
+// immutable, meaning that no new nodes can be registered.
+var ErrImmutableCluster = errors.New("Immutable cluster")
+
+// Storage provides methods to store and retrieve information about the
+// relation between the node and the container. It can be easily represented as
+// a key-value storage.
+//
+// The relevant information is: in which host the given container is running?
+type Storage interface {
+	Store(container, host string) error
+	Retrieve(container string) (host string, err error)
+}
 
 // Node represents a host running Docker. Each node has an ID and an address
 // (in the form <scheme>://<host>:<port>/).
@@ -21,72 +41,71 @@ type Node struct {
 	Address string
 }
 
-type node struct {
-	*docker.Client
-	id   string
-	load int64
-}
-
 // Cluster is the basic type of the package. It manages internal nodes, and
 // provide methods for interaction with those nodes, like CreateContainer,
 // which creates a container in one node of the cluster.
 type Cluster struct {
-	nodes    []node
-	lastUsed int64
-	mut      sync.RWMutex
+	scheduler Scheduler
+
+	stor  Storage
+	mutex sync.RWMutex
 }
 
-// New creates a new Cluster, composed of the given nodes.
-func New(nodes ...Node) (*Cluster, error) {
-	c := Cluster{
-		nodes:    make([]node, len(nodes)),
-		lastUsed: -1,
+// New creates a new Cluster, composed by the given nodes.
+//
+// The parameter Scheduler defines the scheduling strategy, and cannot change.
+// It is optional, when set to nil, the cluster will use a round robin strategy
+// defined internaly.
+func New(scheduler Scheduler, nodes ...Node) (*Cluster, error) {
+	var (
+		c   Cluster
+		err error
+	)
+	c.scheduler = scheduler
+	if scheduler == nil {
+		c.scheduler = &roundRobin{lastUsed: -1}
 	}
-	for i, n := range nodes {
-		client, err := docker.NewClient(n.Address)
-		if err != nil {
-			return nil, err
-		}
-		c.nodes[i] = node{
-			id:     n.ID,
-			Client: client,
-		}
+	if len(nodes) > 0 {
+		err = c.Register(nodes...)
 	}
-	return &c, nil
-}
-
-func (c *Cluster) next() node {
-	c.mut.RLock()
-	defer c.mut.RUnlock()
-	index := atomic.AddInt64(&c.lastUsed, 1) % int64(len(c.nodes))
-	return c.nodes[index]
+	return &c, err
 }
 
 // Register adds new nodes to the cluster.
 func (c *Cluster) Register(nodes ...Node) error {
-	for _, n := range nodes {
-		client, err := docker.NewClient(n.Address)
-		if err != nil {
-			return err
-		}
-		c.mut.Lock()
-		c.nodes = append(c.nodes, node{id: n.ID, Client: client})
-		c.mut.Unlock()
+	if r, ok := c.scheduler.(Registrable); ok {
+		return r.Register(nodes...)
 	}
-	return nil
+	return ErrImmutableCluster
+}
+
+// SetStorage defines the storage in use the cluster.
+func (c *Cluster) SetStorage(storage Storage) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.stor = storage
+}
+
+func (c *Cluster) storage() Storage {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+	return c.stor
 }
 
 type nodeFunc func(node) (interface{}, error)
 
 func (c *Cluster) runOnNodes(fn nodeFunc, errNotFound error) (interface{}, error) {
-	c.mut.RLock()
-	defer c.mut.RUnlock()
+	nodes, err := c.scheduler.Nodes()
+	if err != nil {
+		return nil, err
+	}
 	var wg sync.WaitGroup
 	finish := make(chan int8, 1)
-	errChan := make(chan error, len(c.nodes))
+	errChan := make(chan error, len(nodes))
 	result := make(chan interface{}, 1)
-	for _, n := range c.nodes {
+	for _, n := range nodes {
 		wg.Add(1)
+		client, _ := docker.NewClient(n.Address)
 		go func(n node) {
 			defer wg.Done()
 			value, err := fn(n)
@@ -94,10 +113,10 @@ func (c *Cluster) runOnNodes(fn nodeFunc, errNotFound error) (interface{}, error
 				result <- value
 			} else if e, ok := err.(*docker.Error); ok && e.Status == http.StatusNotFound {
 				return
-			} else if err != errNotFound {
+			} else if !reflect.DeepEqual(err, errNotFound) {
 				errChan <- err
 			}
-		}(n)
+		}(node{id: n.ID, Client: client})
 	}
 	go func() {
 		wg.Wait()
@@ -109,6 +128,11 @@ func (c *Cluster) runOnNodes(fn nodeFunc, errNotFound error) (interface{}, error
 	case err := <-errChan:
 		return nil, err
 	case <-finish:
-		return nil, errNotFound
+		select {
+		case value := <-result:
+			return value, nil
+		default:
+			return nil, errNotFound
+		}
 	}
 }
