@@ -29,7 +29,7 @@ func deployCmds(app provision.App, version string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	cmds := []string{"sudo", "-u", user, deployCmd, appRepo}
+	cmds := []string{"sudo", "-u", user, deployCmd, appRepo, version}
 	return cmds, nil
 }
 
@@ -44,13 +44,9 @@ func runCmds() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	user, err := config.GetString("docker:ssh:user")
-	if err != nil {
-		return nil, err
-	}
 	sshCmd := strings.Join(ssh, " && ")
 	cmd := fmt.Sprintf("%s && %s", runCmd, sshCmd)
-	cmds := []string{"sudo", "-u", user, "/bin/bash", "-c", cmd}
+	cmds := []string{"/bin/bash", "-c", cmd}
 	return cmds, nil
 }
 
