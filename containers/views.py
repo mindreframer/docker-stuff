@@ -52,26 +52,45 @@ def create_container(request):
     image = form.data.get('image')
     environment = form.data.get('environment')
     command = form.data.get('command')
+    memory = form.data.get('memory', 0)
+    volume = form.data.get('volume')
+    volumes_from = form.data.get('volumes_from')
     if command.strip() == '':
         command = None
     if environment.strip() == '':
         environment = None
     else:
         environment = environment.split()
+    if memory.strip() == '':
+        memory = 0
+    # build volumes
+    if volume == '':
+        volume = None
+    if volume:
+        volume = { volume: {}}
+    # convert memory from MB to bytes
+    if memory:
+        memory = int(memory) * 1048576
     ports = form.data.get('ports', '').split()
     hosts = form.data.getlist('hosts')
     private = form.data.get('private')
     user = None
+    status = False
     for i in hosts:
         host = Host.objects.get(id=i)
         if private:
             user = request.user
-        host.create_container(image, command, ports,
-            environment=environment, description=form.data.get('description'),
-            user=user)
+        c_id, status = host.create_container(image, command, ports,
+            environment=environment, memory=memory,
+            description=form.data.get('description'), volumes=volume,
+            volumes_from=volumes_from, owner=user)
     if hosts:
-        messages.add_message(request, messages.INFO, _('Created') + ' {0}'.format(
-            image))
+        if status:
+            messages.add_message(request, messages.INFO, _('Created') + ' {0}'.format(
+                image))
+        else:
+            messages.add_message(request, messages.ERROR,
+                _('Container failed to start'))
     else:
         messages.add_message(request, messages.ERROR, _('No hosts selected'))
     return redirect('dashboard.views.index')
