@@ -5,7 +5,7 @@
 # Currently installs couchdb 1.3.1
 
 FROM ubuntu
-MAINTAINER Kimbro Staken "kstaken@kstaken.com"
+MAINTAINER Kimbro Staken
 
 RUN echo "deb http://us.archive.ubuntu.com/ubuntu/ precise universe" >> /etc/apt/sources.list
 RUN apt-get -y update
@@ -22,8 +22,8 @@ RUN cd /tmp/apache-couchdb-* ; ./configure && make install
 
 RUN printf "[httpd]\nport = 8101\nbind_address = 0.0.0.0" > /usr/local/etc/couchdb/local.d/docker.ini
 
-EXPOSE 8101:8101
+EXPOSE 8101
 
-CMD ["couchdb"]
+CMD ["/usr/local/bin/couchdb"]
 
 

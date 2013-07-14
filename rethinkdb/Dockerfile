@@ -27,19 +27,17 @@
 #    connecting you to an already running container.
 
 FROM ubuntu
-MAINTAINER Kimbro Staken "kstaken@kstaken.com"
+MAINTAINER Kimbro Staken
 
-RUN apt-get update
-RUN apt-get install -y python-software-properties python less
-RUN add-apt-repository ppa:rethinkdb/ppa
-RUN echo "deb http://us.archive.ubuntu.com/ubuntu/ precise universe" >> /etc/apt/sources.list
-RUN apt-get update 
-RUN apt-get install -y rethinkdb
-RUN mkdir /var/rethinkdb
-RUN rethinkdb create -d /var/rethinkdb/db
+RUN echo "0.2" > /version
 
-EXPOSE 8100:8100
+#ADD https://raw.github.com/kstaken/dockerfile-examples/master/rethinkdb-install.sh /rethinkdb-install.sh
+ADD rethinkdb-install.sh /
 
-ENTRYPOINT ["rethinkdb"]
+#RUN /bin/bash /rethinkdb-install.sh
 
-CMD ["-d", "/var/rethinkdb/db", "--bind", "all", "--http-port", "8100"] 
+EXPOSE 8100
+
+#ENTRYPOINT ["rethinkdb"]
+
+#CMD ["-d", "/var/rethinkdb/db", "--bind", "all", "--http-port", "8100"] 
