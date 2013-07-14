@@ -25,6 +25,14 @@ is running on localhost.
 * Open browser to http://localhost:8000
 * Add a host (i.e. 127.0.0.1 for local docker)
 
+Alternate dev setup using vagrant:
+
+* `vagrant up`
+* `vagrant ssh`
+* `./manage.py runserver 0.0.0.0:8000`
+* `./manage.py rqworker shipyard` (in separate ssh session)
+* Open browser to http://localhost:8000
+
 # Features
 
 * Multiple host support
@@ -34,6 +42,7 @@ is running on localhost.
 * Import repositories
 * Private containers
 * Container metadata (description, etc.)
+* Applications: bind containers to applications that are setup with [hipache](https://github.com/dotcloud/hipache)
 * ...more coming...
 
 # Screenshots
@@ -43,6 +52,20 @@ is running on localhost.
 ![Dashboard](http://i.imgur.com/pQrk3mu.png)
 
 ![Create Container](http://i.imgur.com/jLgyxUz.png)
+
+# Applications
+Applications are groups of containers that are accessible by a domain name.  The easiest
+way to test this is to add some local `/etc/hosts` entries for fake domains pointed to `10.10.10.25` (the vagrant vm).  For example, add the following to `/etc/hosts`:
+
+```
+10.10.10.25 foo.local
+```
+
+Then you can create a new application with the domain `foo.local`.  Attach one or more containers and then access http://foo.local in your browser and it should hit Hipache and be routed to the contianers.
+
+For more info on applications, see [here](https://github.com/ehazlett/shipyard/wiki/Applications)
+
+
 
 # License
 
@@ -57,3 +80,4 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
+
