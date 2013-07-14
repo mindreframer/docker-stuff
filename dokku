@@ -1,23 +1,69 @@
 #!/bin/bash
+set -e
+export PLUGIN_PATH=${PLUGIN_PATH:="/var/lib/dokku/plugins"}
 case "$1" in
-  logs)
-    CONTAINER=$(</home/git/$2/CONTAINER)
-    docker logs $CONTAINER | tail -n 100
+  receive)
+    APP="$2"; IMAGE="app/$APP"
+    echo "-----> Building $APP ..."
+    cat | dokku build $IMAGE
+    echo "-----> Build complete!"
+    echo "-----> Deploying $APP ..."
+    dokku deploy $APP $IMAGE
+    echo "=====> Application deployed:"
+    echo "       $(dokku url $APP)"
+    echo
     ;;
 
-  url)
-    echo "http://$(< "/home/git/$2/HOSTNAME")"
+  build)
+    IMAGE="$2"
+    id=$(cat | docker run -i -a stdin progrium/buildstep /bin/bash -c "mkdir -p /app && tar -xC /app")
+    test $(docker wait $id) -eq 0
+    docker commit $id $IMAGE > /dev/null
+    id=$(docker run -d $IMAGE /build/builder)
+    docker attach $id
+    test $(docker wait $id) -eq 0
+    docker commit $id $IMAGE > /dev/null
     ;;
 
-  create-user)
-    
+  deploy)
+    APP="$2"; IMAGE="$3"
+    pluginhook pre-deploy $APP $IMAGE
+    if [[ ! -f "$HOME/$APP/PORT" ]]; then
+      # First deploy
+      id=$(docker run -d -p 5000 -e PORT=5000 $IMAGE /bin/bash -c "/start web")
+      echo $id > "$HOME/$APP/CONTAINER"
+      port=$(docker port $id 5000)
+      echo $port > "$HOME/$APP/PORT"
+      echo "$(< "$HOME/HOSTNAME"):$port" > "$HOME/$APP/ADDRESS"
+    else
+      # Regular deploy
+      oldid=$(< "$HOME/$APP/CONTAINER")
+      docker kill $oldid > /dev/null
+      port=$(< "$HOME/$APP/PORT")
+      id=$(docker run -d -p ":$port" -e "PORT=$port" $IMAGE /bin/bash -c "/start web")
+      echo $id > "$HOME/$APP/CONTAINER"
+    fi
+    pluginhook post-deploy $APP $port
     ;;
-  
-  delete-user)
-  
+
+  plugins)
+    ls -1 -d $PLUGIN_PATH/*/
+    ;;
+
+  plugins-install)
+    pluginhook install
+    ;;
+
+  help)
+    cat<<EOF | pluginhook commands help | sort
+    help            Print the list of commands
+    plugins         Print active plugins
+    plugins-install Install active plugins
+EOF
     ;;
 
   *)
-    echo "Usage: ..."
+    pluginhook commands "$@"
     ;;
+
 esac
