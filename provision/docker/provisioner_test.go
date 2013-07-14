@@ -72,26 +72,31 @@ func (s *S) TestProvisionerRestartCallsTheRestartHook(c *gocheck.C) {
 	c.Assert(fexec.ExecutedCmd("ssh", args), gocheck.Equals, true)
 }
 
-func (s *S) TestDeployShouldCallDockerCreate(c *gocheck.C) {
-	go func() {
-		client, err := dockerClient.NewClient(s.server.URL())
+func (s *S) stopContainers(n uint) {
+	client, err := dockerClient.NewClient(s.server.URL())
+	if err != nil {
+		return
+	}
+	for n > 0 {
+		opts := dockerClient.ListContainersOptions{All: false}
+		containers, err := client.ListContainers(opts)
 		if err != nil {
 			return
 		}
-		for {
-			opts := dockerClient.ListContainersOptions{All: true}
-			containers, err := client.ListContainers(opts)
-			if err != nil {
-				return
-			}
-			if len(containers) > 0 {
-				for _, cont := range containers {
+		if len(containers) > 0 {
+			for _, cont := range containers {
+				if cont.ID != "" {
 					client.StopContainer(cont.ID, 1)
+					n--
 				}
-				return
 			}
 		}
-	}()
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func (s *S) TestDeploy(c *gocheck.C) {
+	go s.stopContainers(1)
 	err := s.newImage()
 	c.Assert(err, gocheck.IsNil)
 	fexec := &etesting.FakeExecutor{}
@@ -101,31 +106,29 @@ func (s *S) TestDeployShouldCallDockerCreate(c *gocheck.C) {
 	app := testing.NewFakeApp("cribcaged", "python", 1)
 	p.Provision(app)
 	defer p.Destroy(app)
-	w := &bytes.Buffer{}
-	err = p.Deploy(app, "master", w)
+	w := writer{b: make([]byte, 2048)}
+	err = p.Deploy(app, "master", &w)
 	c.Assert(err, gocheck.IsNil)
+	w.b = nil
 	defer p.Destroy(app)
+	time.Sleep(6e9)
+	c.Assert(app.GetCommands(), gocheck.DeepEquals, []string{"serialize", "restart"})
+	c.Assert(app.HasLog("tsuru", "Restarting app..."), gocheck.Equals, true)
+}
+
+type writer struct {
+	b   []byte
+	cur int
+}
+
+func (w *writer) Write(c []byte) (int, error) {
+	copy(w.b[w.cur:], c)
+	w.cur += len(c)
+	return len(c), nil
 }
 
 func (s *S) TestDeployRemoveContainersEvenWhenTheyreNotInTheAppsCollection(c *gocheck.C) {
-	go func() {
-		client, err := dockerClient.NewClient(s.server.URL())
-		if err != nil {
-			return
-		}
-		for {
-			opts := dockerClient.ListContainersOptions{All: true}
-			containers, err := client.ListContainers(opts)
-			if err != nil {
-				return
-			}
-			if len(containers) > 0 {
-				for _, cont := range containers {
-					client.StopContainer(cont.ID, 1)
-				}
-			}
-		}
-	}()
+	go s.stopContainers(3)
 	err := s.newImage()
 	c.Assert(err, gocheck.IsNil)
 	cont1, err := s.newContainer()
@@ -143,50 +146,11 @@ func (s *S) TestDeployRemoveContainersEvenWhenTheyreNotInTheAppsCollection(c *go
 	var w bytes.Buffer
 	err = p.Deploy(app, "master", &w)
 	c.Assert(err, gocheck.IsNil)
+	time.Sleep(1e9)
 	defer p.Destroy(app)
 	n, err := s.conn.Collection(s.collName).Find(bson.M{"appname": cont1.AppName}).Count()
 	c.Assert(err, gocheck.IsNil)
 	c.Assert(n, gocheck.Equals, 2)
-}
-
-func (s *S) TestDeployFailureFirstStep(c *gocheck.C) {
-	fmt.Println("xxx")
-	go func() {
-		client, err := dockerClient.NewClient(s.server.URL())
-		if err != nil {
-			return
-		}
-		for {
-			opts := dockerClient.ListContainersOptions{All: true}
-			containers, err := client.ListContainers(opts)
-			if err != nil {
-				return
-			}
-			if len(containers) > 0 {
-				for _, cont := range containers {
-					client.StopContainer(cont.ID, 1)
-				}
-				return
-			}
-		}
-	}()
-	var (
-		p   dockerProvisioner
-		buf bytes.Buffer
-	)
-	app := testing.NewFakeApp("app", "python", 0)
-	app.AddUnit(&testing.FakeUnit{Name: "app/0"})
-	fexec := etesting.ErrorExecutor{
-		FakeExecutor: etesting.FakeExecutor{
-			Output: map[string][][]byte{
-				"*": {[]byte("failed to start container")},
-			},
-		},
-	}
-	setExecut(&fexec)
-	defer setExecut(nil)
-	err := p.Deploy(app, "master", &buf)
-	c.Assert(err, gocheck.NotNil)
 }
 
 func (s *S) TestProvisionerDestroy(c *gocheck.C) {
@@ -260,7 +224,7 @@ func (s *S) TestProvisionerAddr(c *gocheck.C) {
 	var p dockerProvisioner
 	addr, err := p.Addr(app)
 	c.Assert(err, gocheck.IsNil)
-	r, err := getRouter()
+	r, err := Router()
 	c.Assert(err, gocheck.IsNil)
 	expected, err := r.Addr(cont.AppName)
 	c.Assert(err, gocheck.IsNil)
@@ -310,13 +274,21 @@ func (s *S) TestProvisionerRemoveUnit(c *gocheck.C) {
 	container, err := s.newContainer()
 	c.Assert(err, gocheck.IsNil)
 	defer rtesting.FakeRouter.RemoveBackend(container.AppName)
-	defer container.remove()
+	client, err := dockerClient.NewClient(s.server.URL())
+	c.Assert(err, gocheck.IsNil)
+	err = client.StartContainer(container.ID)
+	c.Assert(err, gocheck.IsNil)
 	app := testing.NewFakeApp(container.AppName, "python", 0)
 	var p dockerProvisioner
 	err = p.RemoveUnit(app, container.ID)
 	c.Assert(err, gocheck.IsNil)
 	_, err = getContainer(container.ID)
 	c.Assert(err, gocheck.NotNil)
+	images, err := client.ListImages(true)
+	c.Assert(err, gocheck.IsNil)
+	for _, image := range images {
+		c.Assert(image.Repository, gocheck.Not(gocheck.Equals), "tsuru/python")
+	}
 }
 
 func (s *S) TestProvisionerRemoveUnitNotFound(c *gocheck.C) {
@@ -444,7 +416,7 @@ func (s *S) TestCollectStatus(c *gocheck.C) {
 		"IpPrefixLen": 8,
 		"Gateway": "10.65.41.1",
 		"PortMapping": {
-			"%s": "90293"
+			"Tcp": {"%s": "90293"}
 		}
 	}
 }`, listenPort)
@@ -454,7 +426,7 @@ func (s *S) TestCollectStatus(c *gocheck.C) {
 		"IpPrefixLen": 8,
 		"Gateway": "10.65.41.1",
 		"PortMapping": {
-			"8889": "90294"
+			"Tcp": {"8889": "90294"}
 		}
 	}
 }`
@@ -474,7 +446,7 @@ func (s *S) TestCollectStatus(c *gocheck.C) {
 	}))
 	defer server.Close()
 	oldCluster := dockerCluster()
-	dCluster, err = cluster.New(
+	dCluster, err = cluster.New(nil,
 		cluster.Node{ID: "server", Address: server.URL},
 	)
 	c.Assert(err, gocheck.IsNil)
@@ -601,4 +573,20 @@ func (s *S) TestProvisionerIsCNameManager(c *gocheck.C) {
 	p = &dockerProvisioner{}
 	_, ok := p.(provision.CNameManager)
 	c.Assert(ok, gocheck.Equals, true)
+}
+
+func (s *S) TestSwap(c *gocheck.C) {
+	var p dockerProvisioner
+	app1 := testing.NewFakeApp("app1", "python", 1)
+	app2 := testing.NewFakeApp("app2", "python", 1)
+	rtesting.FakeRouter.AddBackend(app1.GetName())
+	rtesting.FakeRouter.AddRoute(app1.GetName(), "127.0.0.1")
+	rtesting.FakeRouter.AddBackend(app2.GetName())
+	rtesting.FakeRouter.AddRoute(app2.GetName(), "127.0.0.2")
+	err := p.Swap(app1, app2)
+	c.Assert(err, gocheck.IsNil)
+	c.Assert(rtesting.FakeRouter.HasBackend(app1.GetName()), gocheck.Equals, true)
+	c.Assert(rtesting.FakeRouter.HasBackend(app2.GetName()), gocheck.Equals, true)
+	c.Assert(rtesting.FakeRouter.HasRoute(app2.GetName(), "127.0.0.1"), gocheck.Equals, true)
+	c.Assert(rtesting.FakeRouter.HasRoute(app1.GetName(), "127.0.0.2"), gocheck.Equals, true)
 }

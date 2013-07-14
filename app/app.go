@@ -391,7 +391,7 @@ func (app *App) unbindUnit(unit provision.AppUnit) error {
 
 // Available returns true if at least one of N units is started.
 func (app *App) Available() bool {
-	for _, unit := range app.ProvisionUnits() {
+	for _, unit := range app.ProvisionedUnits() {
 		if unit.GetStatus() == provision.StatusStarted {
 			return true
 		}
@@ -520,11 +520,11 @@ func (app *App) loadConf() error {
 		return err
 	}
 	cmd := "cat " + path.Join(uRepo, "app.yaml")
-	var buf bytes.Buffer
-	if err := app.run(cmd, &buf); err != nil {
+	var outStream, errStream bytes.Buffer
+	if err := Provisioner.ExecuteCommand(&outStream, &errStream, app, cmd); err != nil {
 		return nil
 	}
-	err = goyaml.Unmarshal(buf.Bytes(), app.conf)
+	err = goyaml.Unmarshal(outStream.Bytes(), app.conf)
 	if err != nil {
 		app.Log(fmt.Sprintf("Got error while parsing yaml: %s", err), "tsuru")
 		return err
@@ -658,9 +658,9 @@ func (app *App) GetPlatform() string {
 	return app.Platform
 }
 
-// ProvisionUnits returns the internal list of units converted to
+// ProvisionedUnits returns the internal list of units converted to
 // provision.AppUnit.
-func (app *App) ProvisionUnits() []provision.AppUnit {
+func (app *App) ProvisionedUnits() []provision.AppUnit {
 	units := make([]provision.AppUnit, len(app.Units))
 	for i, u := range app.Units {
 		other := u
@@ -895,4 +895,9 @@ func List(u *auth.User) ([]App, error) {
 		return []App{}, err
 	}
 	return apps, nil
+}
+
+// Swap calls the Provisioner.Swap.
+func Swap(app1, app2 *App) error {
+	return Provisioner.Swap(app1, app2)
 }

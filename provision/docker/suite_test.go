@@ -52,8 +52,7 @@ func (s *S) SetUpSuite(c *gocheck.C) {
 	config.Set("docker:collection", s.collName)
 	config.Set("docker:host-address", s.hostAddr)
 	config.Set("docker:deploy-cmd", "/var/lib/tsuru/deploy")
-	config.Set("docker:run-cmd:bin", "/usr/local/bin/circusd")
-	config.Set("docker:run-cmd:args", "/etc/circus/circus.ini")
+	config.Set("docker:run-cmd:bin", "/usr/local/bin/circusd /etc/circus/circus.ini")
 	config.Set("docker:run-cmd:port", "8888")
 	config.Set("docker:ssh:add-key-cmd", "/var/lib/tsuru/add-key")
 	config.Set("docker:ssh:user", s.sshUser)
@@ -70,9 +69,9 @@ func (s *S) SetUpSuite(c *gocheck.C) {
 	c.Assert(err, gocheck.IsNil)
 	f.Write([]byte("key-content"))
 	f.Close()
-	s.server, err = dtesting.NewServer()
+	s.server, err = dtesting.NewServer(nil)
 	c.Assert(err, gocheck.IsNil)
-	dCluster, _ = cluster.New(
+	dCluster, _ = cluster.New(nil,
 		cluster.Node{ID: "server", Address: s.server.URL()},
 	)
 
