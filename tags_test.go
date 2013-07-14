@@ -5,10 +5,7 @@ import (
 )
 
 func TestLookupImage(t *testing.T) {
-	runtime, err := newTestRuntime()
-	if err != nil {
-		t.Fatal(err)
-	}
+	runtime := mkRuntime(t)
 	defer nuke(runtime)
 
 	if img, err := runtime.repositories.LookupImage(unitTestImageName); err != nil {
@@ -35,13 +32,13 @@ func TestLookupImage(t *testing.T) {
 		t.Errorf("Expected 0 image, 1 found")
 	}
 
-	if img, err := runtime.repositories.LookupImage(unitTestImageId); err != nil {
+	if img, err := runtime.repositories.LookupImage(unitTestImageID); err != nil {
 		t.Fatal(err)
 	} else if img == nil {
 		t.Errorf("Expected 1 image, none found")
 	}
 
-	if img, err := runtime.repositories.LookupImage(unitTestImageName + ":" + unitTestImageId); err != nil {
+	if img, err := runtime.repositories.LookupImage(unitTestImageName + ":" + unitTestImageID); err != nil {
 		t.Fatal(err)
 	} else if img == nil {
 		t.Errorf("Expected 1 image, none found")

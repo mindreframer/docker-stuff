@@ -108,9 +108,6 @@ func (runtime *Runtime) Register(container *Container) error {
 	// init the wait lock
 	container.waitLock = make(chan struct{})
 
-	// Even if not running, we init the lock (prevents races in start/stop/kill)
-	container.State.initLock()
-
 	container.runtime = runtime
 
 	// Attach to stdout and stderr
@@ -144,7 +141,8 @@ func (runtime *Runtime) Register(container *Container) error {
 				utils.Debugf("Restarting")
 				container.State.Ghost = false
 				container.State.setStopped(0)
-				if err := container.Start(); err != nil {
+				hostConfig := &HostConfig{}
+				if err := container.Start(hostConfig); err != nil {
 					return err
 				}
 				nomonitor = true

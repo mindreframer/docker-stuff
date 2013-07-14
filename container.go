@@ -52,6 +52,9 @@ type Container struct {
 
 	waitLock chan struct{}
 	Volumes  map[string]string
+	// Store rw/ro in a separate structure to preserve reserve-compatibility on-disk.
+	// Easier than migrating older container configs :)
+	VolumesRW map[string]bool
 }
 
 type Config struct {
@@ -73,9 +76,20 @@ type Config struct {
 	Image        string // Name of the image as it was passed by the operator (eg. could be symbolic)
 	Volumes      map[string]struct{}
 	VolumesFrom  string
+	Entrypoint   []string
 }
 
-func ParseRun(args []string, capabilities *Capabilities) (*Config, *flag.FlagSet, error) {
+type HostConfig struct {
+	Binds []string
+}
+
+type BindMap struct {
+	SrcPath string
+	DstPath string
+	Mode    string
+}
+
+func ParseRun(args []string, capabilities *Capabilities) (*Config, *HostConfig, *flag.FlagSet, error) {
 	cmd := Subcmd("run", "[OPTIONS] IMAGE [COMMAND] [ARG...]", "Run a command in a new container")
 	if len(args) > 0 && args[0] != "--help" {
 		cmd.SetOutput(ioutil.Discard)
@@ -110,12 +124,16 @@ func ParseRun(args []string, capabilities *Capabilities) (*Config, *flag.FlagSet
 	cmd.Var(flVolumes, "v", "Attach a data volume")
 
 	flVolumesFrom := cmd.String("volumes-from", "", "Mount volumes from the specified container")
+	flEntrypoint := cmd.String("entrypoint", "", "Overwrite the default entrypoint of the image")
+
+	var flBinds ListOpts
+	cmd.Var(&flBinds, "b", "Bind mount a volume from the host (e.g. -b /host:/container)")
 
 	if err := cmd.Parse(args); err != nil {
-		return nil, cmd, err
+		return nil, nil, cmd, err
 	}
 	if *flDetach && len(flAttach) > 0 {
-		return nil, cmd, fmt.Errorf("Conflicting options: -a and -d")
+		return nil, nil, cmd, fmt.Errorf("Conflicting options: -a and -d")
 	}
 	// If neither -d or -a are set, attach to everything by default
 	if len(flAttach) == 0 && !*flDetach {
@@ -127,8 +145,17 @@ func ParseRun(args []string, capabilities *Capabilities) (*Config, *flag.FlagSet
 			}
 		}
 	}
+
+	// add any bind targets to the list of container volumes
+	for _, bind := range flBinds {
+		arr := strings.Split(bind, ":")
+		dstDir := arr[1]
+		flVolumes[dstDir] = struct{}{}
+	}
+
 	parsedArgs := cmd.Args()
 	runCmd := []string{}
+	entrypoint := []string{}
 	image := ""
 	if len(parsedArgs) >= 1 {
 		image = cmd.Arg(0)
@@ -136,6 +163,10 @@ func ParseRun(args []string, capabilities *Capabilities) (*Config, *flag.FlagSet
 	if len(parsedArgs) > 1 {
 		runCmd = parsedArgs[1:]
 	}
+	if *flEntrypoint != "" {
+		entrypoint = []string{*flEntrypoint}
+	}
+
 	config := &Config{
 		Hostname:     *flHostname,
 		PortSpecs:    flPorts,
@@ -153,6 +184,10 @@ func ParseRun(args []string, capabilities *Capabilities) (*Config, *flag.FlagSet
 		Image:        image,
 		Volumes:      flVolumes,
 		VolumesFrom:  *flVolumesFrom,
+		Entrypoint:   entrypoint,
+	}
+	hostConfig := &HostConfig{
+		Binds: flBinds,
 	}
 
 	if capabilities != nil && *flMemory > 0 && !capabilities.SwapLimit {
@@ -164,22 +199,27 @@ func ParseRun(args []string, capabilities *Capabilities) (*Config, *flag.FlagSet
 	if config.OpenStdin && config.AttachStdin {
 		config.StdinOnce = true
 	}
-	return config, cmd, nil
+	return config, hostConfig, cmd, nil
 }
+
+type PortMapping map[string]string
 
 type NetworkSettings struct {
 	IPAddress   string
 	IPPrefixLen int
 	Gateway     string
 	Bridge      string
-	PortMapping map[string]string
+	PortMapping map[string]PortMapping
 }
 
 // String returns a human-readable description of the port mapping defined in the settings
 func (settings *NetworkSettings) PortMappingHuman() string {
 	var mapping []string
-	for private, public := range settings.PortMapping {
+	for private, public := range settings.PortMapping["Tcp"] {
 		mapping = append(mapping, fmt.Sprintf("%s->%s", public, private))
+	}
+	for private, public := range settings.PortMapping["Udp"] {
+		mapping = append(mapping, fmt.Sprintf("%s->%s/udp", public, private))
 	}
 	sort.Strings(mapping)
 	return strings.Join(mapping, ", ")
@@ -228,6 +268,26 @@ func (container *Container) ToDisk() (err error) {
 		return
 	}
 	return ioutil.WriteFile(container.jsonPath(), data, 0666)
+}
+
+func (container *Container) ReadHostConfig() (*HostConfig, error) {
+	data, err := ioutil.ReadFile(container.hostConfigPath())
+	if err != nil {
+		return &HostConfig{}, err
+	}
+	hostConfig := &HostConfig{}
+	if err := json.Unmarshal(data, hostConfig); err != nil {
+		return &HostConfig{}, err
+	}
+	return hostConfig, nil
+}
+
+func (container *Container) SaveHostConfig(hostConfig *HostConfig) (err error) {
+	data, err := json.Marshal(hostConfig)
+	if err != nil {
+		return
+	}
+	return ioutil.WriteFile(container.hostConfigPath(), data, 0666)
 }
 
 func (container *Container) generateLXCConfig() error {
@@ -430,9 +490,12 @@ func (container *Container) Attach(stdin io.ReadCloser, stdinCloser io.Closer, s
 	})
 }
 
-func (container *Container) Start() error {
-	container.State.lock()
-	defer container.State.unlock()
+func (container *Container) Start(hostConfig *HostConfig) error {
+	container.State.Lock()
+	defer container.State.Unlock()
+	if len(hostConfig.Binds) == 0 {
+		hostConfig, _ = container.ReadHostConfig()
+	}
 
 	if container.State.Running {
 		return fmt.Errorf("The container %s is already running.", container.ID)
@@ -454,17 +517,71 @@ func (container *Container) Start() error {
 		container.Config.MemorySwap = -1
 	}
 	container.Volumes = make(map[string]string)
+	container.VolumesRW = make(map[string]bool)
 
+	// Create the requested bind mounts
+	binds := make(map[string]BindMap)
+	// Define illegal container destinations
+	illegalDsts := []string{"/", "."}
+
+	for _, bind := range hostConfig.Binds {
+		// FIXME: factorize bind parsing in parseBind
+		var src, dst, mode string
+		arr := strings.Split(bind, ":")
+		if len(arr) == 2 {
+			src = arr[0]
+			dst = arr[1]
+			mode = "rw"
+		} else if len(arr) == 3 {
+			src = arr[0]
+			dst = arr[1]
+			mode = arr[2]
+		} else {
+			return fmt.Errorf("Invalid bind specification: %s", bind)
+		}
+
+		// Bail if trying to mount to an illegal destination
+		for _, illegal := range illegalDsts {
+			if dst == illegal {
+				return fmt.Errorf("Illegal bind destination: %s", dst)
+			}
+		}
+
+		bindMap := BindMap{
+			SrcPath: src,
+			DstPath: dst,
+			Mode:    mode,
+		}
+		binds[path.Clean(dst)] = bindMap
+	}
+
+	// FIXME: evaluate volumes-from before individual volumes, so that the latter can override the former.
 	// Create the requested volumes volumes
 	for volPath := range container.Config.Volumes {
-		c, err := container.runtime.volumes.Create(nil, container, "", "", nil)
-		if err != nil {
-			return err
+		volPath = path.Clean(volPath)
+		// If an external bind is defined for this volume, use that as a source
+		if bindMap, exists := binds[volPath]; exists {
+			container.Volumes[volPath] = bindMap.SrcPath
+			if strings.ToLower(bindMap.Mode) == "rw" {
+				container.VolumesRW[volPath] = true
+			}
+			// Otherwise create an directory in $ROOT/volumes/ and use that
+		} else {
+			c, err := container.runtime.volumes.Create(nil, container, "", "", nil)
+			if err != nil {
+				return err
+			}
+			srcPath, err := c.layer()
+			if err != nil {
+				return err
+			}
+			container.Volumes[volPath] = srcPath
+			container.VolumesRW[volPath] = true // RW by default
 		}
+		// Create the mountpoint
 		if err := os.MkdirAll(path.Join(container.RootfsPath(), volPath), 0755); err != nil {
 			return nil
 		}
-		container.Volumes[volPath] = c.ID
 	}
 
 	if container.Config.VolumesFrom != "" {
@@ -547,12 +664,14 @@ func (container *Container) Start() error {
 	container.waitLock = make(chan struct{})
 
 	container.ToDisk()
+	container.SaveHostConfig(hostConfig)
 	go container.monitor()
 	return nil
 }
 
 func (container *Container) Run() error {
-	if err := container.Start(); err != nil {
+	hostConfig := &HostConfig{}
+	if err := container.Start(hostConfig); err != nil {
 		return err
 	}
 	container.Wait()
@@ -565,7 +684,8 @@ func (container *Container) Output() (output []byte, err error) {
 		return nil, err
 	}
 	defer pipe.Close()
-	if err := container.Start(); err != nil {
+	hostConfig := &HostConfig{}
+	if err := container.Start(hostConfig); err != nil {
 		return nil, err
 	}
 	output, err = ioutil.ReadAll(pipe)
@@ -597,14 +717,18 @@ func (container *Container) allocateNetwork() error {
 	if err != nil {
 		return err
 	}
-	container.NetworkSettings.PortMapping = make(map[string]string)
+	container.NetworkSettings.PortMapping = make(map[string]PortMapping)
+	container.NetworkSettings.PortMapping["Tcp"] = make(PortMapping)
+	container.NetworkSettings.PortMapping["Udp"] = make(PortMapping)
 	for _, spec := range container.Config.PortSpecs {
 		nat, err := iface.AllocatePort(spec)
 		if err != nil {
 			iface.Release()
 			return err
 		}
-		container.NetworkSettings.PortMapping[strconv.Itoa(nat.Backend)] = strconv.Itoa(nat.Frontend)
+		proto := strings.Title(nat.Proto)
+		backend, frontend := strconv.Itoa(nat.Backend), strconv.Itoa(nat.Frontend)
+		container.NetworkSettings.PortMapping[proto][backend] = frontend
 	}
 	container.network = iface
 	container.NetworkSettings.Bridge = container.runtime.networkManager.bridgeIface
@@ -730,8 +854,8 @@ func (container *Container) kill() error {
 }
 
 func (container *Container) Kill() error {
-	container.State.lock()
-	defer container.State.unlock()
+	container.State.Lock()
+	defer container.State.Unlock()
 	if !container.State.Running {
 		return nil
 	}
@@ -739,8 +863,8 @@ func (container *Container) Kill() error {
 }
 
 func (container *Container) Stop(seconds int) error {
-	container.State.lock()
-	defer container.State.unlock()
+	container.State.Lock()
+	defer container.State.Unlock()
 	if !container.State.Running {
 		return nil
 	}
@@ -768,7 +892,8 @@ func (container *Container) Restart(seconds int) error {
 	if err := container.Stop(seconds); err != nil {
 		return err
 	}
-	if err := container.Start(); err != nil {
+	hostConfig := &HostConfig{}
+	if err := container.Start(hostConfig); err != nil {
 		return err
 	}
 	return nil
@@ -878,6 +1003,10 @@ func (container *Container) ReadLog(name string) (io.Reader, error) {
 	return os.Open(container.logPath(name))
 }
 
+func (container *Container) hostConfigPath() string {
+	return path.Join(container.root, "hostconfig.json")
+}
+
 func (container *Container) jsonPath() string {
 	return path.Join(container.root, "config.json")
 }
@@ -889,22 +1018,6 @@ func (container *Container) lxcConfigPath() string {
 // This method must be exported to be used from the lxc template
 func (container *Container) RootfsPath() string {
 	return path.Join(container.root, "rootfs")
-}
-
-func (container *Container) GetVolumes() (map[string]string, error) {
-	ret := make(map[string]string)
-	for volPath, id := range container.Volumes {
-		volume, err := container.runtime.volumes.Get(id)
-		if err != nil {
-			return nil, err
-		}
-		root, err := volume.root()
-		if err != nil {
-			return nil, err
-		}
-		ret[volPath] = path.Join(root, "layer")
-	}
-	return ret, nil
 }
 
 func (container *Container) rwPath() string {

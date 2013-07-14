@@ -220,6 +220,46 @@ Inspect a container
 	:statuscode 500: server error
 
 
+List processes running inside a container
+*****************************************
+
+.. http:get:: /containers/(id)/top
+
+	List processes running inside the container ``id``
+
+	**Example request**:
+
+	.. sourcecode:: http
+
+	   GET /containers/4fa6e0f0c678/top HTTP/1.1
+
+	**Example response**:
+
+	.. sourcecode:: http
+
+	   HTTP/1.1 200 OK
+	   Content-Type: application/json
+
+	   [
+		{
+		 "PID":"11935",
+		 "Tty":"pts/2",
+		 "Time":"00:00:00",
+		 "Cmd":"sh"
+		},
+		{
+		 "PID":"12140",
+		 "Tty":"pts/2",
+		 "Time":"00:00:00",
+		 "Cmd":"sleep"
+		}
+	   ]
+
+	:statuscode 200: no error
+	:statuscode 404: no such container
+	:statuscode 500: server error
+
+
 Inspect changes on a container's filesystem
 *******************************************
 
@@ -294,23 +334,30 @@ Start a container
 
 .. http:post:: /containers/(id)/start
 
-	Start the container ``id``
+        Start the container ``id``
 
-	**Example request**:
+        **Example request**:
 
-	.. sourcecode:: http
+        .. sourcecode:: http
 
-	   POST /containers/e90e34656806/start HTTP/1.1
-	   
-	**Example response**:
+           POST /containers/(id)/start HTTP/1.1
+           Content-Type: application/json
 
-	.. sourcecode:: http
+           {
+                "Binds":["/tmp:/tmp"]
+           }
 
-	   HTTP/1.1 200 OK
-	   	
-	:statuscode 200: no error
-	:statuscode 404: no such container
-	:statuscode 500: server error
+        **Example response**:
+
+        .. sourcecode:: http
+
+           HTTP/1.1 204 No Content
+           Content-Type: text/plain
+
+        :jsonparam hostConfig: the container's host configuration (optional)
+        :statuscode 200: no error
+        :statuscode 404: no such container
+        :statuscode 500: server error
 
 
 Stop a contaier
@@ -793,7 +840,7 @@ Remove an image
 	    {"Deleted":"53b4f83ac9"}
 	   ]
 
-	:statuscode 204: no error
+	:statuscode 200: no error
         :statuscode 404: no such image
 	:statuscode 409: conflict
         :statuscode 500: server error
