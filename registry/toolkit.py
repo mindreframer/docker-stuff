@@ -3,6 +3,7 @@ import functools
 import logging
 import string
 import random
+import urllib
 import time
 import re
 
@@ -12,6 +13,7 @@ import requests
 
 import config
 import storage
+
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +68,8 @@ def validate_token(auth):
         index_endpoint = 'https://index.docker.io'
     index_endpoint = index_endpoint.strip('/')
     url = '{0}/v1/repositories/{1}/{2}/images'.format(index_endpoint,
-            full_repos_name[0], full_repos_name[1])
+                                                      full_repos_name[0],
+                                                      full_repos_name[1])
     headers = {'Authorization': request.headers.get('authorization')}
     resp = requests.get(url, verify=True, headers=headers)
     logger.debug('validate_token: Index returned {0}'.format(resp.status_code))
@@ -76,7 +79,7 @@ def validate_token(auth):
     try:
         images_list = [i['id'] for i in json.loads(resp.text)]
         store.put_content(store.images_list_path(*full_repos_name),
-                json.dumps(images_list))
+                          json.dumps(images_list))
     except json.JSONDecodeError:
         logger.debug('validate_token: Wrong format for images_list')
         return False
@@ -90,23 +93,31 @@ def get_remote_ip():
 
 
 _auth_exp = re.compile(r'(\w+)[:=][\s"]?([^",]+)"?')
+
+
 def check_token(args):
     cfg = config.load()
-    if cfg.disable_token_auth is True:
+    if cfg.disable_token_auth is True or cfg.standalone is not False:
         return True
     auth = request.headers.get('authorization', '')
     if auth.split(' ')[0].lower() != 'token':
         logger.debug('check_token: Invalid token format')
         return False
+    logger.debug('args = {0}'.format(args))
+    logger.debug('Auth Token = {0}'.format(auth))
     auth = dict(_auth_exp.findall(auth))
+    logger.debug('auth = {0}'.format(auth))
     if not auth:
         return False
     if 'namespace' in args and 'repository' in args:
         # We're authorizing an action on a repository,
         # let's check that it matches the repos name provided in the token
         full_repos_name = '{namespace}/{repository}'.format(**args)
+        logger.debug('full_repos_name  = {0}'.format(full_repos_name))
         if full_repos_name != auth.get('repository'):
-            logger.debug('check_token: Wrong repository name in the token')
+            logger.debug('check_token: Wrong repository name in the token:'
+                         '{0} != {1}'.format(full_repos_name,
+                                             auth.get('repository')))
             return False
     # Check that the token `access' variable is aligned with the HTTP method
     access = auth.get('access')
@@ -145,4 +156,18 @@ def api_error(message, code=400, headers=None):
 
 def gen_random_string(length=16):
     return ''.join([random.choice(string.ascii_uppercase + string.digits)
-        for x in range(length)])
+                    for x in range(length)])
+
+
+def parse_repository_name(f):
+    @functools.wraps(f)
+    def wrapper(repository, *args, **kwargs):
+        parts = repository.rstrip('/').split('/', 1)
+        if len(parts) < 2:
+            namespace = 'library'
+            repository = parts[0]
+        else:
+            (namespace, repository) = parts
+        repository = urllib.quote_plus(repository)
+        return f(namespace, repository, *args, **kwargs)
+    return wrapper

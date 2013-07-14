@@ -1,6 +1,8 @@
 
 import os
 import shutil
+import tempfile
+import contextlib
 from cStringIO import StringIO
 
 import boto.s3.connection
@@ -24,8 +26,9 @@ class Storage(object):
     buffer_size = 4096
 
     def images_list_path(self, namespace, repository):
-        return '{0}/{1}/{2}/_images_list'.format(self.repositories, namespace,
-            repository)
+        return '{0}/{1}/{2}/_images_list'.format(self.repositories,
+                                                 namespace,
+                                                 repository)
 
     def image_json_path(self, image_id):
         return '{0}/{1}/json'.format(self.images, image_id)
@@ -44,10 +47,18 @@ class Storage(object):
 
     def tag_path(self, namespace, repository, tagname=None):
         if not tagname:
-            return '{0}/{1}/{2}'.format(self.repositories, namespace,
-                    repository)
-        return '{0}/{1}/{2}/tag_{3}'.format(self.repositories, namespace,
-            repository, tagname)
+            return '{0}/{1}/{2}'.format(self.repositories,
+                                        namespace,
+                                        repository)
+        return '{0}/{1}/{2}/tag_{3}'.format(self.repositories,
+                                            namespace,
+                                            repository,
+                                            tagname)
+
+    def index_images_path(self, namespace, repository):
+        return '{0}/{1}/{2}/_index_images'.format(self.repositories,
+                                                  namespace,
+                                                  repository)
 
     def get_content(self, path):
         raise NotImplemented
@@ -153,16 +164,17 @@ class S3Storage(Storage):
 
     def __init__(self):
         self._config = config.load()
-        self._s3_conn = boto.s3.connection.S3Connection(
-                self._config.s3_access_key,
-                self._config.s3_secret_key,
-                is_secure=False)
+        self._s3_conn = \
+            boto.s3.connection.S3Connection(self._config.s3_access_key,
+                                            self._config.s3_secret_key,
+                                            is_secure=False)
         self._s3_bucket = self._s3_conn.get_bucket(self._config.s3_bucket)
         self._root_path = self._config.storage_path
 
     def _debug_key(self, key):
         """ Used for debugging only """
         orig_meth = key.bucket.connection.make_request
+
         def new_meth(*args, **kwargs):
             print '#' * 16
             print args
@@ -269,7 +281,23 @@ class S3Storage(Storage):
         return key.size
 
 
+@contextlib.contextmanager
+def store_stream(stream):
+    """ Stores the entire stream to a temporary file """
+    tmpf = tempfile.TemporaryFile()
+    while True:
+        buf = stream.read(4096)
+        if not buf:
+            break
+        tmpf.write(buf)
+    tmpf.seek(0)
+    yield tmpf
+    tmpf.close()
+
+
 _storage = {}
+
+
 def load(kind=None):
     """ Returns the right storage class according to the configuration """
     global _storage
