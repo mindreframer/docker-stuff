@@ -2,6 +2,8 @@
 
 Docker powered mini-Heroku. The smallest PaaS implementation you've ever seen.
 
+[![Build Status](https://travis-ci.org/progrium/dokku.png?branch=master)](https://travis-ci.org/progrium/dokku)
+
 ## Requirements
 
 Assumes Ubuntu 13 right now. Ideally have a domain ready to point to your host. It's designed for and is probably
@@ -15,7 +17,7 @@ This may take around 5 minutes. Certainly better than the several hours it takes
 
 ## Configuring
 
-Set up a domain and a wildcard domain pointing to that host. Make sure `/home/git/DOMAIN` is set to this domain. 
+Set up a domain and a wildcard domain pointing to that host. Make sure `/home/git/VHOST` is set to this domain. 
 By default it's set to whatever the hostname the host has.
 
 You'll have to add a public key associated with a username as it says at the end of the bootstrapper. You'll do something
@@ -51,14 +53,29 @@ You're done!
 
 ## Advanced installation (for development)
 
-The bootstrap script allows source URLs to be overridden to include customizations from your own 
-repositories. The GITRECEIVE_URL and DOKKU_REPO environment variables
-may be set to override the defaults (see the bootstrap.sh script for how these apply). Example:
+If you plan on developing dokku, the easiest way to install from your own repository is cloning
+the repository and calling the install script. Example:
 
-    $ wget j.mp/dokku-bootstrap
+    $ git clone https://github.com/yourusername/dokku.git
+    $ cd dokku
+    $ sudo make all
+
+The `Makefile` allows source URLs to be overridden to include customizations from your own
+repositories. The DOCKER_URL, GITRECEIVE_URL, PLUGINHOOK_URL, SSHCOMMAND_URL and STACK_URL
+environment variables may be set to override the defaults (see the `Makefile` for how these
+apply). Example:
+
+    $ sudo GITRECEIVE_URL=https://raw.github.com/yourusername/gitreceive/master/gitreceive make all
+
+## Advanced installation (bootstrap a server from your own repository)
+
+The bootstrap script allows the dokku repository URL to be overridden to bootstrap a host from
+your own clone of dokku using the DOKKU_REPO environment variable. Example:
+
+    $ wget https://raw.github.com/progrium/dokku/master/bootstrap.sh
     $ chmod +x bootstrap.sh
     $ sudo DOKKU_REPO=https://github.com/yourusername/dokku.git ./bootstrap.sh
-    
+
 ## Upgrading
 
 Dokku is in active development. You can update the deployment step and the build step separately.
@@ -67,13 +84,6 @@ To update the deploy step (this is updated less frequently):
     $ cd ~/dokku
     $ git pull origin master
     $ sudo make install
-    
-More frequently, the build step is updated. This is where the app "stack" lives and where buildpacks
-are supported. You can update this by running:
-
-    $ cd ~/dokku/buildstep
-    $ git pull origin master
-    $ sudo make build
 
 Nothing needs to be restarted. Changes will take effect on the next push / deployment.
 
@@ -86,6 +96,7 @@ You can use [Github Issues](https://github.com/progrium/dokku/issues), check [Tr
  * [Docker](https://github.com/dotcloud/docker) - Container runtime and manager
  * [Buildstep](https://github.com/progrium/buildstep) - Buildpack builder
  * [gitreceive](https://github.com/progrium/gitreceive) - Git push interface
+ * [pluginhook](https://github.com/progrium/pluginhook) - Shell based plugins and hooks
  * [sshcommand](https://github.com/progrium/sshcommand) - Fixed commands over SSH
 
 ## Ideas for Improvements
