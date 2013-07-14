@@ -19,7 +19,7 @@ import (
 )
 
 func TestNewServer(t *testing.T) {
-	server, err := NewServer()
+	server, err := NewServer(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,7 @@ func TestNewServer(t *testing.T) {
 }
 
 func TestServerStop(t *testing.T) {
-	server, err := NewServer()
+	server, err := NewServer(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestServerStopNoListener(t *testing.T) {
 }
 
 func TestServerURL(t *testing.T) {
-	server, err := NewServer()
+	server, err := NewServer(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,6 +65,18 @@ func TestServerURLNoListener(t *testing.T) {
 	url := server.URL()
 	if url != "" {
 		t.Errorf("DockerServer.URL(): Expected empty URL on handler mode, got %q.", url)
+	}
+}
+
+func TestHandleWithHook(t *testing.T) {
+	var called bool
+	server, _ := NewServer(func(*http.Request) { called = true })
+	defer server.Stop()
+	recorder := httptest.NewRecorder()
+	request, _ := http.NewRequest("GET", "/v1.1/containers/json?all=1", nil)
+	server.ServeHTTP(recorder, request)
+	if !called {
+		t.Error("ServeHTTP did not call the hook function.")
 	}
 }
 
@@ -96,6 +108,26 @@ func TestListContainers(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, expected) {
 		t.Errorf("ListContainers. Want %#v. Got %#v.", expected, got)
+	}
+}
+
+func TestListRunningContainers(t *testing.T) {
+	server := DockerServer{}
+	addContainers(&server, 2)
+	server.buildMuxer()
+	recorder := httptest.NewRecorder()
+	request, _ := http.NewRequest("GET", "/v1.1/containers/json?all=0", nil)
+	server.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Errorf("ListRunningContainers: wrong status. Want %d. Got %d.", http.StatusOK, recorder.Code)
+	}
+	var got []docker.APIContainers
+	err := json.NewDecoder(recorder.Body).Decode(&got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) == 0 {
+		t.Errorf("ListRunningContainers: Want 0. Got %d.", len(got))
 	}
 }
 
@@ -451,6 +483,23 @@ func TestRemoveContainerNotFound(t *testing.T) {
 	}
 }
 
+func TestRemoveContainerRunning(t *testing.T) {
+	server := DockerServer{}
+	addContainers(&server, 1)
+	server.containers[0].State.Running = true
+	server.buildMuxer()
+	recorder := httptest.NewRecorder()
+	path := fmt.Sprintf("/v1.1/containers/%s", server.containers[0].ID)
+	request, _ := http.NewRequest("DELETE", path, nil)
+	server.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusInternalServerError {
+		t.Errorf("RemoveContainer: wrong status. Want %d. Got %d.", http.StatusInternalServerError, recorder.Code)
+	}
+	if len(server.containers) < 1 {
+		t.Error("RemoveContainer: should not remove the container.")
+	}
+}
+
 func TestPullImage(t *testing.T) {
 	server := DockerServer{imgIDs: make(map[string]string)}
 	server.buildMuxer()
@@ -465,6 +514,28 @@ func TestPullImage(t *testing.T) {
 	}
 	if _, ok := server.imgIDs["base"]; !ok {
 		t.Error("PullImage: Repository should not be empty.")
+	}
+}
+
+func TestPushImage(t *testing.T) {
+	server := DockerServer{imgIDs: map[string]string{"tsuru/python": "a123"}}
+	server.buildMuxer()
+	recorder := httptest.NewRecorder()
+	request, _ := http.NewRequest("POST", "/v1.1/images/tsuru/python/push", nil)
+	server.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Errorf("PushImage: wrong status. Want %d. Got %d.", http.StatusOK, recorder.Code)
+	}
+}
+
+func TestPushImageNotFound(t *testing.T) {
+	server := DockerServer{}
+	server.buildMuxer()
+	recorder := httptest.NewRecorder()
+	request, _ := http.NewRequest("POST", "/v1.1/images/tsuru/python/push", nil)
+	server.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusNotFound {
+		t.Errorf("PushImage: wrong status. Want %d. Got %d.", http.StatusNotFound, recorder.Code)
 	}
 }
 
@@ -499,7 +570,9 @@ func addContainers(server *DockerServer, n int) {
 				IPPrefixLen: 24,
 				Gateway:     "10.10.10.1",
 				Bridge:      "docker0",
-				PortMapping: map[string]string{"8888": fmt.Sprintf("%d", 49600+i)},
+				PortMapping: map[string]docker.PortMapping{
+					"Tcp": {"8888": fmt.Sprintf("%d", 49600+i)},
+				},
 			},
 			ResolvConfPath: "/etc/resolv.conf",
 		}

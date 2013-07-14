@@ -6,16 +6,12 @@ package docker
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/dotcloud/docker"
 	"io"
 	"net/http"
 	"os"
 )
-
-// Error returned when the container does not exist.
-var ErrNoSuchContainer = errors.New("No such container")
 
 // ListContainersOptions specify parameters to the ListContainers function.
 //
@@ -52,7 +48,7 @@ func (c *Client) InspectContainer(id string) (*docker.Container, error) {
 	path := "/containers/" + id + "/json"
 	body, status, err := c.do("GET", path, nil)
 	if status == http.StatusNotFound {
-		return nil, ErrNoSuchContainer
+		return nil, &NoSuchContainer{ID: id}
 	}
 	if err != nil {
 		return nil, err
@@ -90,9 +86,10 @@ func (c *Client) CreateContainer(config *docker.Config) (*docker.Container, erro
 // See http://goo.gl/QipuL for more details.
 func (c *Client) StartContainer(id string) error {
 	path := "/containers/" + id + "/start"
-	_, status, err := c.do("POST", path, nil)
+	hostConfig := &docker.HostConfig{}
+	_, status, err := c.do("POST", path, hostConfig)
 	if status == http.StatusNotFound {
-		return ErrNoSuchContainer
+		return &NoSuchContainer{ID: id}
 	}
 	if err != nil {
 		return err
@@ -108,7 +105,7 @@ func (c *Client) StopContainer(id string, timeout uint) error {
 	path := fmt.Sprintf("/containers/%s/stop?t=%d", id, timeout)
 	_, status, err := c.do("POST", path, nil)
 	if status == http.StatusNotFound {
-		return ErrNoSuchContainer
+		return &NoSuchContainer{ID: id}
 	}
 	if err != nil {
 		return err
@@ -124,7 +121,7 @@ func (c *Client) RestartContainer(id string, timeout uint) error {
 	path := fmt.Sprintf("/containers/%s/restart?t=%d", id, timeout)
 	_, status, err := c.do("POST", path, nil)
 	if status == http.StatusNotFound {
-		return ErrNoSuchContainer
+		return &NoSuchContainer{ID: id}
 	}
 	if err != nil {
 		return err
@@ -139,7 +136,7 @@ func (c *Client) KillContainer(id string) error {
 	path := "/containers/" + id + "/kill"
 	_, status, err := c.do("POST", path, nil)
 	if status == http.StatusNotFound {
-		return ErrNoSuchContainer
+		return &NoSuchContainer{ID: id}
 	}
 	if err != nil {
 		return err
@@ -153,7 +150,7 @@ func (c *Client) KillContainer(id string) error {
 func (c *Client) RemoveContainer(id string) error {
 	_, status, err := c.do("DELETE", "/containers/"+id, nil)
 	if status == http.StatusNotFound {
-		return ErrNoSuchContainer
+		return &NoSuchContainer{ID: id}
 	}
 	if err != nil {
 		return err
@@ -168,7 +165,7 @@ func (c *Client) RemoveContainer(id string) error {
 func (c *Client) WaitContainer(id string) (int, error) {
 	body, status, err := c.do("POST", "/containers/"+id+"/wait", nil)
 	if status == http.StatusNotFound {
-		return 0, ErrNoSuchContainer
+		return 0, &NoSuchContainer{ID: id}
 	}
 	if err != nil {
 		return 0, err
@@ -200,7 +197,7 @@ func (c *Client) CommitContainer(opts CommitContainerOptions) (*docker.Image, er
 	path := "/commit?" + queryString(opts)
 	body, status, err := c.do("POST", path, nil)
 	if status == http.StatusNotFound {
-		return nil, ErrNoSuchContainer
+		return nil, &NoSuchContainer{ID: opts.Container}
 	}
 	if err != nil {
 		return nil, err
@@ -246,7 +243,7 @@ type AttachToContainerOptions struct {
 func (c *Client) AttachToContainer(opts AttachToContainerOptions) error {
 	container := opts.Container
 	if container == "" {
-		return ErrNoSuchContainer
+		return &NoSuchContainer{ID: container}
 	}
 	stdout := opts.OutputStream
 	stderr := opts.ErrorStream
@@ -258,8 +255,14 @@ func (c *Client) AttachToContainer(opts AttachToContainerOptions) error {
 	opts.ErrorStream = nil
 	opts.RawTerminal = false
 	path := "/containers/" + container + "/attach?" + queryString(opts)
-	if opts.Logs {
-		return c.stream("POST", path, nil, stdout)
-	}
 	return c.hijack("POST", path, raw, stdin, stderr, stdout)
+}
+
+// NoSuchContainer is the error returned when a given container does not exist.
+type NoSuchContainer struct {
+	ID string
+}
+
+func (err *NoSuchContainer) Error() string {
+	return "No such container: " + err.ID
 }
