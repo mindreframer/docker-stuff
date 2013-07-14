@@ -29,6 +29,11 @@ You can still call an old version of the api using /v1.0/images/<name>/insert
 What's new
 ----------
 
+Listing processes (/top):
+
+- List the processes inside a container
+
+
 Builder (/build):
 
 - Simplify the upload of the build context
@@ -42,6 +47,9 @@ List containers (/containers/json):
 
 - You can use size=1 to get the size of the containers
 
+Start containers (/containers/<id>/start):
+
+- You can now pass host-specific configuration (e.g. bind mounts) in the POST body for start calls 
 
 :doc:`docker_remote_api_v1.2`
 *****************************
@@ -127,3 +135,6 @@ and we will add the libraries here.
 | Javascript (Angular) | dockerui       | https://github.com/crosbymichael/dockerui  |
 | **WebUI**            |                |                                            |
 +----------------------+----------------+--------------------------------------------+
+| Java                 | docker-java    | https://github.com/kpelykh/docker-java     |
++----------------------+----------------+--------------------------------------------+
+
