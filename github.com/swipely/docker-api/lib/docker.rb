@@ -2,6 +2,7 @@ require 'cgi'
 require 'json'
 require 'excon'
 require 'tempfile'
+require 'rubygems/package'
 require 'archive/tar/minitar'
 
 # The top-level module for this gem. It's purpose is to hold global
@@ -39,12 +40,12 @@ module Docker
 
   # Get the version of Go, Docker, and optionally the Git commit.
   def version
-    connection.json_request(:get, '/version')
+    Util.parse_json(connection.get('/version'))
   end
 
   # Get more information about the Docker server.
   def info
-    connection.json_request(:get, '/info')
+    Util.parse_json(connection.get('/info'))
   end
 
   # Login to the Docker registry.
@@ -53,10 +54,20 @@ module Docker
     connection.post(:path => '/auth', :body => @creds)
     true
   end
+
+  # When the correct version of Docker is installed, returns true. Otherwise,
+  # raises a VersionError.
+  def validate_version!
+    Docker.info
+    true
+  rescue Docker::Error::DockerError
+    raise Docker::Error::VersionError, "Expected API Version: #{API_VERSION}"
+  end
 end
 
 require 'docker/version'
 require 'docker/error'
+require 'docker/util'
 require 'docker/connection'
 require 'docker/model'
 require 'docker/container'

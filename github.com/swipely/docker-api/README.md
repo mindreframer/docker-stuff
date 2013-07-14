@@ -1,6 +1,6 @@
 docker-api
 ==========
-[![travis-ci](https://travis-ci.org/swipely/docker-api.png?branch=master)](https://travis-ci.org/swipely/docker-api) [![Code Climate](https://codeclimate.com/github/swipely/docker-api.png)](https://codeclimate.com/github/swipely/docker-api)
+[![Gem Version](https://badge.fury.io/rb/docker-api.png)](http://badge.fury.io/rb/docker-api) [![travis-ci](https://travis-ci.org/swipely/docker-api.png?branch=master)](https://travis-ci.org/swipely/docker-api) [![Code Climate](https://codeclimate.com/github/swipely/docker-api.png)](https://codeclimate.com/github/swipely/docker-api) [![Dependency Status](https://gemnasium.com/swipely/docker-api.png)](https://gemnasium.com/swipely/docker-api)
 
 This gem provides an object-oriented interface to the [Docker Remote API](http://docs.docker.io/en/latest/api/docker_remote_api_v1.2/). Every method listed there is implemented, with the exception of attaching to the STDIN of a Container. At the time of this writing, docker-api is meant to interface with Docker version 0.4.6.
 
@@ -50,6 +50,8 @@ Docker.options = { :port => 5422 }
 ```
 
 Two things to note here. The first is that this gem uses [excon](http://www.github.com/geemus/excon), so any of the options that are valid for `Excon.new` are alse valid for `Docker.options`. Second, by default Docker runs on port 4243. The gem will assume you want to connnect to port 4243 unless you specify otherwise.
+
+Before doing anything else, ensure you have the correct version of the Docker API. To do this, run `Docker.validate_version!`. If your installed version is not supported, a `Docker::Error::VersionError` is raised.
 
 ## Global calls
 
@@ -118,7 +120,7 @@ Docker::Image.build("from base\nrun touch /test")
 # => Docker::Image { :id => b750fe79269d2ec9a3c593ef05b4332b1d1a02a62b4accb2c21d589ff2f5f2dc, :connection => Docker::Connection { :url => http://localhost, :options => {:port=>4243} } }
 
 # Create an Image from a Dockerfile.
-Dockerfile::Image.build_from_dir('.')
+Docker::Image.build_from_dir('.')
 # => Docker::Image { :id => 1266dc19e, :connection => Docker::Connection { :url => http://localhost, :options => {:port=>4243} } }
 
 # Load all Images on your Docker server.
@@ -171,8 +173,9 @@ end
 container.changes
 # => [{'Path'=>'/dev', 'Kind'=>0}, {'Path'=>'/dev/kmsg', 'Kind'=>1}]
 
-# Wait for the current command to finish executing.
-container.wait
+# Wait for the current command to finish executing. If an argument is given,
+# will timeout after that number of seconds. The default is one minute.
+container.wait(15)
 # => {'StatusCode'=>0}
 
 # Attach to the Container. Currently, the below options are the only valid ones.
@@ -180,9 +183,19 @@ container.wait
 container.attach(:stream => true, :stdout => true, :stderr => true, :logs => true)
 # => "bin\nboot\ndev\netc\nhome\nlib\nlib64\nmedia\nmnt\nopt\nproc\nroot\nrun\nsbin\nselinux\nsrv\nsys\ntmp\nusr\nvar"
 
+# If you wish to stream the attach method, a block may be supplied.
+container = Docker::Container.create('Image' => 'base', 'Cmd' => %[find / -name *])
+container.tap(&:start).attach { |chunk| puts chunk }
+# => nil
+
 # Create an Image from a Container's changes.
 container.commit
 # => Docker::Image { :id => eaeb8d00efdf, :connection => Docker::Connection { :url => http://localhost, :options => {:port=>4243} } }
+
+# Commit the Container and run a new command. The second argument is the number
+# of seconds the Container should wait before stopping its current command.
+container.run('pwd', 10)
+# => Docker::Image { :id => 4427be4199ac, :connection => Docker::Connection { :url => http://localhost, :options => {:port=>4243} } }
 
 # Request all of the Containers. By default, will only return the running Containers.
 Docker::Container.all(:all => true)
