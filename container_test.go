@@ -228,8 +228,9 @@ func TestInspectContainerNotFound(t *testing.T) {
 	if container != nil {
 		t.Errorf("InspectContainer: Expected <nil> container, got %#v", container)
 	}
-	if !reflect.DeepEqual(err, ErrNoSuchContainer) {
-		t.Errorf("InspectContainer: Wrong error information. Want %#v. Got %#v.", ErrNoSuchContainer, err)
+	expected := &NoSuchContainer{ID: "abe033"}
+	if !reflect.DeepEqual(err, expected) {
+		t.Errorf("InspectContainer: Wrong error information. Want %#v. Got %#v.", expected, err)
 	}
 }
 
@@ -308,6 +309,10 @@ func TestStartContainer(t *testing.T) {
 	if gotPath := req.URL.Path; gotPath != expectedURL.Path {
 		t.Errorf("StartContainer(%q): Wrong path in request. Want %q. Got %q.", id, expectedURL.Path, gotPath)
 	}
+	expectedContentType := "application/json"
+	if contentType := req.Header.Get("Content-Type"); contentType != expectedContentType {
+		t.Errorf("StartContainer(%q): Wrong content-type in request. Want %q. Got %q.", id, expectedContentType, contentType)
+	}
 }
 
 func TestStartContainerNotFound(t *testing.T) {
@@ -318,8 +323,9 @@ func TestStartContainerNotFound(t *testing.T) {
 		},
 	}
 	err := client.StartContainer("a2344")
-	if !reflect.DeepEqual(err, ErrNoSuchContainer) {
-		t.Errorf("StartContainer: Wrong error returned. Want %#v. Got %#v.", ErrNoSuchContainer, err)
+	expected := &NoSuchContainer{ID: "a2344"}
+	if !reflect.DeepEqual(err, expected) {
+		t.Errorf("StartContainer: Wrong error returned. Want %#v. Got %#v.", expected, err)
 	}
 }
 
@@ -352,8 +358,9 @@ func TestStopContainerNotFound(t *testing.T) {
 		},
 	}
 	err := client.StopContainer("a2334", 10)
-	if !reflect.DeepEqual(err, ErrNoSuchContainer) {
-		t.Errorf("StopContainer: Wrong error returned. Want %#v. Got %#v.", ErrNoSuchContainer, err)
+	expected := &NoSuchContainer{ID: "a2334"}
+	if !reflect.DeepEqual(err, expected) {
+		t.Errorf("StopContainer: Wrong error returned. Want %#v. Got %#v.", expected, err)
 	}
 }
 
@@ -386,8 +393,9 @@ func TestRestartContainerNotFound(t *testing.T) {
 		},
 	}
 	err := client.RestartContainer("a2334", 10)
-	if !reflect.DeepEqual(err, ErrNoSuchContainer) {
-		t.Errorf("RestartContainer: Wrong error returned. Want %#v. Got %#v.", ErrNoSuchContainer, err)
+	expected := &NoSuchContainer{ID: "a2334"}
+	if !reflect.DeepEqual(err, expected) {
+		t.Errorf("RestartContainer: Wrong error returned. Want %#v. Got %#v.", expected, err)
 	}
 }
 
@@ -420,8 +428,9 @@ func TestKillContainerNotFound(t *testing.T) {
 		},
 	}
 	err := client.KillContainer("a2334")
-	if !reflect.DeepEqual(err, ErrNoSuchContainer) {
-		t.Errorf("KillContainer: Wrong error returned. Want %#v. Got %#v.", ErrNoSuchContainer, err)
+	expected := &NoSuchContainer{ID: "a2334"}
+	if !reflect.DeepEqual(err, expected) {
+		t.Errorf("KillContainer: Wrong error returned. Want %#v. Got %#v.", expected, err)
 	}
 }
 
@@ -454,8 +463,9 @@ func TestRemoveContainerNotFound(t *testing.T) {
 		},
 	}
 	err := client.RemoveContainer("a2334")
-	if !reflect.DeepEqual(err, ErrNoSuchContainer) {
-		t.Errorf("RemoveContainer: Wrong error returned. Want %#v. Got %#v.", ErrNoSuchContainer, err)
+	expected := &NoSuchContainer{ID: "a2334"}
+	if !reflect.DeepEqual(err, expected) {
+		t.Errorf("RemoveContainer: Wrong error returned. Want %#v. Got %#v.", expected, err)
 	}
 }
 
@@ -491,8 +501,9 @@ func TestWaitContainerNotFound(t *testing.T) {
 		},
 	}
 	_, err := client.WaitContainer("a2334")
-	if !reflect.DeepEqual(err, ErrNoSuchContainer) {
-		t.Errorf("WaitContainer: Wrong error returned. Want %#v. Got %#v.", ErrNoSuchContainer, err)
+	expected := &NoSuchContainer{ID: "a2334"}
+	if !reflect.DeepEqual(err, expected) {
+		t.Errorf("WaitContainer: Wrong error returned. Want %#v. Got %#v.", expected, err)
 	}
 }
 
@@ -577,17 +588,20 @@ func TestCommitContainerNotFound(t *testing.T) {
 		},
 	}
 	_, err := client.CommitContainer(CommitContainerOptions{})
-	if !reflect.DeepEqual(err, ErrNoSuchContainer) {
-		t.Errorf("CommitContainer: Wrong error returned. Want %#v. Got %#v.", ErrNoSuchContainer, err)
+	expected := &NoSuchContainer{ID: ""}
+	if !reflect.DeepEqual(err, expected) {
+		t.Errorf("CommitContainer: Wrong error returned. Want %#v. Got %#v.", expected, err)
 	}
 }
 
 func TestAttachToContainerLogs(t *testing.T) {
-	fakeRT := FakeRoundTripper{message: "something happened", status: http.StatusOK}
-	client := Client{
-		endpoint: "http://localhost:4243",
-		client:   &http.Client{Transport: &fakeRT},
-	}
+	var req http.Request
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("something happened"))
+		req = *r
+	}))
+	defer server.Close()
+	client, _ := NewClient(server.URL)
 	var buf bytes.Buffer
 	opts := AttachToContainerOptions{
 		Container:    "a123456",
@@ -604,7 +618,6 @@ func TestAttachToContainerLogs(t *testing.T) {
 	if buf.String() != expected {
 		t.Errorf("AttachToContainer for logs: wrong output. Want %q. Got %q.", expected, buf.String())
 	}
-	req := fakeRT.requests[0]
 	if req.Method != "POST" {
 		t.Errorf("AttachToContainer: wrong HTTP method. Want POST. Got %s.", req.Method)
 	}
@@ -668,7 +681,16 @@ func TestAttachToContainer(t *testing.T) {
 func TestAttachToContainerWithoutContainer(t *testing.T) {
 	var client Client
 	err := client.AttachToContainer(AttachToContainerOptions{})
-	if err != ErrNoSuchContainer {
-		t.Errorf("AttachToContainer: wrong error. Want %#v. Got %#v.", ErrNoSuchContainer, err)
+	expected := &NoSuchContainer{ID: ""}
+	if !reflect.DeepEqual(err, expected) {
+		t.Errorf("AttachToContainer: wrong error. Want %#v. Got %#v.", expected, err)
+	}
+}
+
+func TestNoSuchContainerError(t *testing.T) {
+	var err error = &NoSuchContainer{ID: "i345"}
+	expected := "No such container: i345"
+	if got := err.Error(); got != expected {
+		t.Errorf("NoSuchContainer: wrong message. Want %q. Got %q.", expected, got)
 	}
 }
