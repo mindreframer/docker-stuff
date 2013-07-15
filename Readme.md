@@ -62,6 +62,10 @@ Articles:
       A docker.io cookbook that can install docker, manage images, and try to set up an AUFS kernel.
        2 commits, last change: 2013-05-19 09:47:20, 9 stars, 0 forks
 
+    dynport/docker-private-registry:
+      Private docker registry impleted with golang
+       8 commits, last change: 2013-07-14 07:20:36, 1 stars, 0 forks
+
     dynport/dockland:
       Yet another docker web ui
        6 commits, last change: 2013-06-17 03:22:43, 1 stars, 0 forks
@@ -125,6 +129,10 @@ Articles:
     ptone/jiffylab:
       zero configuration Python/Unix web based teaching env
        12 commits, last change: 2013-06-27 02:04:18, 25 stars, 2 forks
+
+    rainforestapp/Docker-Terminal:
+      A terminal for Docker containers in js
+       7 commits, last change: 2013-07-11 15:43:43, 1 stars, 0 forks
 
     shingara/dockerfiles:
       Some DockerFile I create
