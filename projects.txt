@@ -6,6 +6,7 @@ https://github.com/dotcloud/docker.git
 https://github.com/dotcloud/dockerlite.git
 https://github.com/dotcloud/openstack-docker.git
 https://github.com/dreid/docker-cookbook.git
+https://github.com/dynport/docker-private-registry.git
 https://github.com/dynport/dockland.git
 https://github.com/ehazlett/shipyard.git
 https://github.com/fsouza/go-dockerclient.git
@@ -22,7 +23,6 @@ https://github.com/portertech/kitchen-docker.git
 https://github.com/progrium/buildstep.git
 https://github.com/progrium/dokku.git
 https://github.com/ptone/jiffylab.git
+https://github.com/rainforestapp/Docker-Terminal.git
 https://github.com/shingara/dockerfiles.git
 https://github.com/swipely/docker-api.git
-https://github.com/rainforestapp/Docker-Terminal.git
-https://github.com/dynport/docker-private-registry.git
