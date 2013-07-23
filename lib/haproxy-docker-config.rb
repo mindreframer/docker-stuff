@@ -173,7 +173,7 @@ if options[:action_given] == :delete then
     end
   end
 end
-if options[:action_given] == :check then
+if options[:action_given] == :check
   begin
     action = HADockerConfig_Check.new(
         options[:listener],
@@ -183,9 +183,9 @@ if options[:action_given] == :check then
     res = action.process
 
     # dump result
-    if options[:output_style] == :plain then
+    if options[:output_style] == :plain
       res.each do |instance_id, status|
-        puts format("%-20s\t%s", instance_id, ((status==true) ? "balanced" : "not_balanced"))
+        puts format("%-20s\t%s", instance_id, (status ? 'balanced' : 'not_balanced'))
       end
     end
     if options[:output_style] == :yaml then
@@ -215,7 +215,7 @@ if options[:action_given] == :verify then
     # dump result
     if options[:output_style] == :plain then
       res.each do |instance_id, details|
-        puts format("%-20s\t%s", instance_id, ((details != nil) ? "found" : "not_found"))
+        puts format('%-20s\t%s', instance_id, ((details != nil) ? 'found' : 'not_found'))
       end
     end
     if options[:output_style] == :yaml then
@@ -239,7 +239,7 @@ if options[:restart] then
   begin
     system('service haproxy restart')
   rescue => e
-    STDERR.puts("ERROR: Restarting haproxy. Please check service.")
+    STDERR.puts('ERROR: Restarting haproxy. Please check service.')
     if options[:verbose] then
       STDERR.puts e
     end
@@ -255,7 +255,7 @@ if options[:hotrestart] then
     end
     system cmd
   rescue => e
-    STDERR.puts("ERROR: Restarting hot-haproxy. Please check service.")
+    STDERR.puts('ERROR: Hot-Restarting haproxy. Please check service.')
     if options[:verbose] then
       STDERR.puts e
     end
