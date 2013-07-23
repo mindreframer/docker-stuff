@@ -67,6 +67,28 @@ installed. There are several different behaviors available:
 
 The default value is `true`.
 
+### provision\_command
+
+Custom command(s) to be run when provisioning the base for the suite containers.
+
+Examples:
+
+```
+  provision_command: "curl -L https://www.opscode.com/chef/install.sh | sudo bash"
+```
+
+```
+  provision_command:
+    - "apt-get install dnsutils"
+    - "apt-get install telnet"
+```
+
+```
+driver_config:
+  provision_command: "curl -L https://www.opscode.com/chef/install.sh | sudo bash"
+  require_chef_omnibus: false
+```
+
 ### remove\_images
 
 This determines if images are automatically removed when the suite container is
@@ -77,7 +99,7 @@ The default value is `false`.
 ### memory
 
 Sets the memory limit for the container. The value must be set in bytes.
-If not, set it defaults to dockers default settings. You can read more about 
+If not, set it defaults to dockers default settings. You can read more about
 `memory.limit_in_bytes` [here][memory_limit_in_bytes].
 
 ### cpu
@@ -87,7 +109,7 @@ default settings. You can read more about cpu.shares [here][cpu_shares].
 
 ### volume
 
-Adds a data volume to your container.
+Adds a data volume(s) to the suite container.
 
 Examples:
 
