@@ -17,7 +17,7 @@ class TestContainer(unittest.TestCase):
     env = yaml.load(self.mix.dump())
     self._configCheck(env)   
 
-  @unittest.skip("Skipping")
+  #@unittest.skip("Skipping")
   def testBuildDockerfile(self):
     mix = dockermix.ContainerMix('dockermix-dockerfile.yml')
     mix.build()
@@ -33,13 +33,13 @@ class TestContainer(unittest.TestCase):
 
       if container == 'test_server_1':
         self.assertNotEqual(state['Config']['Image'], 'ubuntu')
-        self.assertEqual(state['Path'], 'ps')
-        self.assertEqual(state['Args'][0], 'aux')
+        self.assertEqual(state['Path'], 'ns')
+        self.assertEqual(state['Args'][0], '-l')
         
-      elif container == 'test_server_2':
-        self.assertEqual(state['Config']['Image'], 'ubuntu')
-        self.assertEqual(state['Path'], 'ls')
-        self.assertEqual(state['Args'][0], '-l')  
+      #elif container == 'test_server_2':
+      #  self.assertNotEqual(state['Config']['Image'], 'ubuntu')
+       # self.assertEqual(state['Path'], 'ls')
+       # self.assertEqual(state['Args'][0], '-l')  
         
   
   #@unittest.skip("skipping")
@@ -51,9 +51,9 @@ class TestContainer(unittest.TestCase):
       
       self.assertIsNotNone(state)
       if container == 'test_server_1':
-        self.assertIn('8080', state['NetworkSettings']['PortMapping'])
+        self.assertIn('8080', state['NetworkSettings']['PortMapping']['Tcp'])
       elif container == 'test_server_2':
-        self.assertEqual(state['NetworkSettings']['PortMapping'], {})
+        self.assertEqual(state['NetworkSettings']['PortMapping']['Tcp'], {})
       else:
         # Shouldn't get here
         self.assertFalse(True)
@@ -62,6 +62,7 @@ class TestContainer(unittest.TestCase):
   def testDestroy(self):
     mix = dockermix.ContainerMix('dockermix.yml')
     mix.build()
+   
     env = yaml.load(mix.dump())
     mix.destroy()
 
@@ -78,6 +79,65 @@ class TestContainer(unittest.TestCase):
       env = yaml.load(input_file)
 
     self._configCheck(env)  
+
+  #@unittest.skip("skipping")
+  def testDependencyEnv(self):
+    mix = dockermix.ContainerMix('dockermix-count.yml')
+        
+    mix.build()
+    
+    # Verify that all three services are running
+    env = yaml.load(mix.dump())    
+    
+    self.assertEqual(len(env['containers']), 4)
+
+    state = docker.Client().inspect_container(env['containers']['service_post']['container_id'])
+    #self.assertIn("SERVICE1", state['Config']['Env'])
+      
+    mix.destroy()
+  
+  #@unittest.skip("skipping")
+  def testCount(self):
+    mix = dockermix.ContainerMix('dockermix-count.yml')
+        
+    mix.build(180)
+    
+    # Verify that all three services are running
+    env = yaml.load(mix.dump())    
+    
+    self.assertEqual(len(env['containers']), 4)
+
+    for container in env['containers']:
+      state = docker.Client().inspect_container(env['containers'][container]['container_id'])
+      
+      #Verify the containers are running
+      self.assertTrue(state['State']['Running'])
+      self.assertEqual(state['State']['ExitCode'], 0)
+    
+    mix.destroy()
+
+  #@unittest.skip("skipping")
+  def testRequire(self):
+    mix = dockermix.ContainerMix('dockermix-require.yml')
+    
+    # Verify that it determined the correct start order
+    start_order = mix.start_order
+    self.assertEqual(start_order[0], 'test_server_2')
+    self.assertEqual(start_order[1], 'test_server_1')
+    self.assertEqual(start_order[2], 'test_server_3')
+    
+    mix.build()
+    
+    # Verify that all three services are running
+    env = yaml.load(mix.dump())    
+    for container in env['containers']:
+      state = docker.Client().inspect_container(env['containers'][container]['container_id'])
+      
+      #Verify the containers are running
+      self.assertTrue(state['State']['Running'])
+      self.assertEqual(state['State']['ExitCode'], 0)
+    
+    mix.destroy()
 
   #@unittest.skip("skipping")
   def testStop(self):
@@ -138,7 +198,8 @@ class TestContainer(unittest.TestCase):
       self.assertEqual(state['State']['ExitCode'], 0)
     
     mix.destroy()
-
+  
+  #@unittest.skip("skipping")
   def testStatus(self):
     mix = dockermix.ContainerMix('dockermix-startstop.yml')
     mix.build()

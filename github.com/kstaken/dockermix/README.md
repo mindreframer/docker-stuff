@@ -1,7 +1,23 @@
 dockermix
 ============
 
-A command line tool to build and manage multi-container docker environments. Allows you to build/start/stop and destory containers as a set with full Docker configuration. Container sets are defined in a simple YAML format that mirrors the options available in the Docker API.
+A command line tool to build and manage multi-container docker environments. Container sets are defined in a simple YAML format that mirrors the options available in the Docker API. The intention is to be able to easily launch, orchestrate and destroy complex multi-node envionments for testing and development.
+
+
+Status
+======
+
+Early development. Certainly lots of bugs and not quite useful yet but getting close. The configuration format in particular is changing heavily.
+
+Features
+========
+
+- Build/start/stop/destroy multi-container docker environments via simple commands
+- Declarative YAML format to specify container configurations for the environment
+- Easily launch multiple instances of the same container for testing cluster operations
+- Specify dependencies between containers so they start in order and wait for services to become available
+- Automatically configure dependent containers to know where to locate services from other containers in the same environment
+- ... Much more to come
 
 Dependencies
 =============
@@ -33,39 +49,46 @@ YAML format basically maps to the docker-py api.
 
 `base_image` and `command` are the only required options. 
 
+You can use `require` to specify dependencies between services. The start order will be adjusted and any container that requires a port on a another container will wait for that port to become available before starting.
+
 Here's an example yaml file:
 
 ```
   containers:
-    test_server_1: 
+    test_server_1:
       base_image: ubuntu
-      ports: 
-        - '8080' 
-      command: 'ps aux' 
-      hostname: test_server_1 
-      user: root
-      detach: true
-      stdin_open: true
-      tty: true
-      mem_limit: 2560000
-      environment: 
-        - ENV_VAR=testing
-      dns: 
-        - 8.8.8.8
-        - 8.8.4.4
-      volumes: 
-        /var/testing: {}
-            
+      config:
+        ports: 
+          - '8080' 
+        command: '/bin/bash -c "apt-get install netcat ; nc -l 8080 -k"' 
+        hostname: test_server_1 
+        user: root
+        detach: true
+        stdin_open: true
+        tty: true
+        mem_limit: 2560000
+        environment: 
+          - ENV_VAR=testing
+        dns: 
+          - 8.8.8.8
+          - 8.8.4.4
+        volumes: 
+          /var/testing: {}
+              
     test_server_2: 
       base_image: ubuntu
-      command: 'ls -l'
+      config:
+        command: 'ls -l'
+      require
+        test_server_1: 
+          port: '8080' 
 ```
 
 **Note:** *Command is required by the Docker Python api and having to specify it here can cause problems with images that pre-define entrypoints and commands.*
 
 **Note:** *the syntax for volumes is not fully specified and bind mounts are not currently supported.*
 
-**Note:** *There is basic support for embedding dockerfiles in the specification but the details of how that works is going to change. It's also currently limited to docker builder implementation that's part of docker-py and doesn't align with the current state of the Docker Builder documentation.*
+**Note:** *There is basic support for embedding dockerfiles in the specification but the details of how that works is going to change.*
 
 Command Line Tools
 ===
@@ -99,8 +122,9 @@ Roadmap
 
 - Bootstrap installer
 - Add the ability to share configuration data between containers
-- Explicitly specify startup order and dependencies
-- More powerful Docker Builder support (currently docker-py reimplements Docker Builder and it out of sync with the server implementation)
+- ~~Explicitly specify startup order and dependencies~~
+- More powerful Docker Builder support ~~(currently docker-py reimplements Docker Builder and it out of sync with the server implementation)~~
 - Add automatic pulling of base images
 - Make it easier to run the full test suite
+- Add external dependencies
 - ...
