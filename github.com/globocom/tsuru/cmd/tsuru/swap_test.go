@@ -7,7 +7,7 @@ package main
 import (
 	"bytes"
 	"github.com/globocom/tsuru/cmd"
-	"github.com/globocom/tsuru/testing"
+	"github.com/globocom/tsuru/cmd/testing"
 	"launchpad.net/gocheck"
 	"net/http"
 )
@@ -42,4 +42,8 @@ func (s *S) TestSwap(c *gocheck.C) {
 	c.Assert(called, gocheck.Equals, true)
 	expected := "Apps successfully swapped!\n"
 	c.Assert(buf.String(), gocheck.Equals, expected)
+}
+
+func (s *S) TestSwapIsACommand(c *gocheck.C) {
+	var _ cmd.Command = swap{}
 }

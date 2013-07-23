@@ -8,9 +8,18 @@ import (
 	"io/ioutil"
 	"launchpad.net/gocheck"
 	"net/http"
+	"testing"
 )
 
-func (s *S) TestTransport(c *gocheck.C) {
+type S struct{}
+
+var _ = gocheck.Suite(S{})
+
+func Test(t *testing.T) {
+	gocheck.TestingT(t)
+}
+
+func (S) TestTransport(c *gocheck.C) {
 	var t http.RoundTripper = &Transport{
 		Message: "Ok",
 		Status:  http.StatusOK,
@@ -26,7 +35,7 @@ func (s *S) TestTransport(c *gocheck.C) {
 	c.Assert(r.Header.Get("Authorization"), gocheck.Equals, "something")
 }
 
-func (s *S) TestConditionalTransport(c *gocheck.C) {
+func (S) TestConditionalTransport(c *gocheck.C) {
 	var t http.RoundTripper = &ConditionalTransport{
 		Transport: Transport{
 			Message: "Ok",

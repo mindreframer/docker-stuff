@@ -10,7 +10,7 @@ import (
 	"github.com/globocom/tsuru/app"
 	"github.com/globocom/tsuru/log"
 	"github.com/globocom/tsuru/provision"
-	"os"
+	stdlog "log"
 	"time"
 )
 
@@ -27,29 +27,15 @@ func collect(ticker <-chan time.Time) {
 }
 
 func fatal(err error) {
-	fmt.Fprintln(os.Stderr, err)
-	log.Fatal(err)
+	stdlog.Fatal(err)
 }
 
-func loadConfig(flags map[string]interface{}) string {
-	configFile, ok := flags["config"].(string)
-	if !ok {
-		configFile = "/etc/tsuru/tsuru.conf"
-	}
-	err := config.ReadAndWatchConfigFile(configFile)
-	if err != nil {
-		fatal(err)
-	}
-	return configFile
-}
-
-func Run(flags map[string]interface{}) {
-	configFile := loadConfig(flags)
-	log.Init()
-	dry, ok := flags["dry"].(bool)
-	if !ok {
-		dry = false
-	}
+// Run is the function that starts the collector. The dryMode parameter
+// indicates whether the collector should loop forever or not.
+//
+// It assumes the configuration has already been defined (from a config file or
+// memory).
+func Run(dryMode bool) {
 	connString, err := config.GetString("database:url")
 	if err != nil {
 		fatal(err)
@@ -59,10 +45,10 @@ func Run(flags map[string]interface{}) {
 		fatal(err)
 	}
 	fmt.Printf("Using the database %q from the server %q.\n\n", dbName, connString)
-	if !dry {
+	if !dryMode {
 		provisioner, err := config.GetString("provisioner")
 		if err != nil {
-			fmt.Printf("Warning: %q didn't declare a provisioner, using default provisioner.\n", configFile)
+			fmt.Println("Warning: configuration didn't declare a provisioner, using default provisioner.")
 			provisioner = "juju"
 		}
 		app.Provisioner, err = provision.Get(provisioner)
