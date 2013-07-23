@@ -1,3 +1,8 @@
+.. use orphan to suppress "WARNING: document isn't included in any toctree"
+.. per http://sphinx-doc.org/markup/misc.html#file-wide-metadata
+
+:orphan:
+
 :title: Remote API v1.3
 :description: API Documentation for Docker
 :keywords: API, Docker, rcli, REST, documentation
@@ -921,6 +926,7 @@ Build an image from Dockerfile via stdin
         The Content-type header should be set to "application/tar".
 
 	:query t: tag to be applied to the resulting image in case of success
+	:query q: suppress verbose build output
 	:statuscode 200: no error
         :statuscode 500: server error
 
