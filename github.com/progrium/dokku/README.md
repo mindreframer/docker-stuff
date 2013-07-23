@@ -17,8 +17,7 @@ This may take around 5 minutes. Certainly better than the several hours it takes
 
 ## Configuring
 
-Set up a domain and a wildcard domain pointing to that host. Make sure `/home/git/VHOST` is set to this domain. 
-By default it's set to whatever the hostname the host has.
+Set up a domain and a wildcard domain pointing to that host. Make sure `/home/git/VHOST` is set to this domain. By default it's set to whatever the hostname the host has. This file only created if the hostname can be resolved by dig (`dig +short $HOSTNAME`). Otherwise you have to create the file manually and set it to your prefered domain. If this file still not present when you push your app, dokku will publish the app with a port number (i.e. `http://example.com:49154` - note the missing subdomain).
 
 You'll have to add a public key associated with a username as it says at the end of the bootstrapper. You'll do something
 like this from your local machine:
@@ -43,13 +42,39 @@ the Heroku Node.js sample app. All you have to do is add a remote to name the ap
     remote: -----> Building node-js-app ...
     remote:        Node.js app detected
     remote: -----> Resolving engine versions
-    
+
     ... blah blah blah ...
-    
+
     remote: -----> Application deployed:
     remote:        http://node-js-app.progriumapp.com
 
 You're done!
+
+## Removing a deployed app
+
+Currently this is a manual process.
+
+To remove an app, ssh to the server, then run:
+
+    $ sudo docker ps
+    # Then from the list, take repository name of your app and run:
+    $ sudo docker stop app/node-js-sample
+    # To find the ids of images to delete, run:
+    $ sudo docker images
+    # Then from that list, take the IDs corresponding to your app, and
+    # those corresponding to no tag at all, and for each run:
+    $ sudo docker rmi 123456789
+
+## Environment setup
+
+Typically application requires some environment variables to be set up for proper run. Environment variables might contain some private date, like passwords and API keys, so it's not recommend to store them as part of source code.
+
+To setup environment for your application, create file `/home/git/APP_NAME/ENV`. This file is a script that would expose all required environment variables, like:
+
+    export NODE_ENV=production
+    export MONGODB_PASSWORD=password
+
+Next time the application is deployed, those variables would be exposed by `start` script.
 
 ## Advanced installation (for development)
 
@@ -79,6 +104,7 @@ your own clone of dokku using the DOKKU_REPO environment variable. Example:
 ## Upgrading
 
 Dokku is in active development. You can update the deployment step and the build step separately.
+
 To update the deploy step (this is updated less frequently):
 
     $ cd ~/dokku
@@ -86,6 +112,16 @@ To update the deploy step (this is updated less frequently):
     $ sudo make install
 
 Nothing needs to be restarted. Changes will take effect on the next push / deployment.
+
+To update the build step:
+
+    $ git clone https://github.com/progrium/buildstep.git
+    $ cd buildstep
+    $ git pull origin master
+    $ sudo make build
+
+This will build a fresh Ubuntu Quantal image, install a number of packages, and
+eventually replace the Docker image for buildstep.
 
 ## Support
 
