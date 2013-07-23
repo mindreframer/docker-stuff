@@ -34,6 +34,10 @@ Articles:
       Deployment automation for Docker
        34 commits, last change: 2013-06-25 10:28:13, 1 stars, 2 forks
 
+    andrewh/dockerfiles:
+
+       3 commits, last change: 2013-07-17 08:21:01, 0 stars, 0 forks
+
     aschmidt75/haproxy-docker-config:
       Configuring haproxy to automatically redirect to docker instances
        16 commits, last change: 2013-07-04 06:56:46, 3 stars, 0 forks
