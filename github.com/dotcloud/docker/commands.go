@@ -27,7 +27,7 @@ import (
 	"unicode"
 )
 
-const VERSION = "0.4.8"
+const VERSION = "0.5.0-dev"
 
 var (
 	GITCOMMIT string
@@ -94,8 +94,8 @@ func (cli *DockerCli) CmdHelp(args ...string) error {
 		{"pull", "Pull an image or a repository from the docker registry server"},
 		{"push", "Push an image or a repository to the docker registry server"},
 		{"restart", "Restart a running container"},
-		{"rm", "Remove a container"},
-		{"rmi", "Remove an image"},
+		{"rm", "Remove one or more containers"},
+		{"rmi", "Remove one or more images"},
 		{"run", "Run a command in a new container"},
 		{"search", "Search for an image in the docker index"},
 		{"start", "Start a stopped container"},
@@ -158,6 +158,8 @@ func mkBuildContext(dockerfile string, files [][2]string) (Archive, error) {
 func (cli *DockerCli) CmdBuild(args ...string) error {
 	cmd := Subcmd("build", "[OPTIONS] PATH | URL | -", "Build a new container image from the source code at PATH")
 	tag := cmd.String("t", "", "Tag to be applied to the resulting image in case of success")
+	suppressOutput := cmd.Bool("q", false, "Suppress verbose build output")
+
 	if err := cmd.Parse(args); err != nil {
 		return nil
 	}
@@ -183,6 +185,9 @@ func (cli *DockerCli) CmdBuild(args ...string) error {
 	} else if utils.IsURL(cmd.Arg(0)) || utils.IsGIT(cmd.Arg(0)) {
 		isRemote = true
 	} else {
+		if _, err := os.Stat(cmd.Arg(0)); err != nil {
+			return err
+		}
 		context, err = Tar(cmd.Arg(0), Uncompressed)
 	}
 	var body io.Reader
@@ -195,6 +200,10 @@ func (cli *DockerCli) CmdBuild(args ...string) error {
 	// Upload the build context
 	v := &url.Values{}
 	v.Set("t", *tag)
+
+	if *suppressOutput {
+		v.Set("q", "1")
+	}
 	if isRemote {
 		v.Set("remote", cmd.Arg(0))
 	}
@@ -469,7 +478,7 @@ func (cli *DockerCli) CmdInfo(args ...string) error {
 
 func (cli *DockerCli) CmdStop(args ...string) error {
 	cmd := Subcmd("stop", "[OPTIONS] CONTAINER [CONTAINER...]", "Stop a running container")
-	nSeconds := cmd.Int("t", 10, "wait t seconds before killing the container")
+	nSeconds := cmd.Int("t", 10, "Number of seconds to wait for the container to stop before killing it.")
 	if err := cmd.Parse(args); err != nil {
 		return nil
 	}
@@ -494,7 +503,7 @@ func (cli *DockerCli) CmdStop(args ...string) error {
 
 func (cli *DockerCli) CmdRestart(args ...string) error {
 	cmd := Subcmd("restart", "[OPTIONS] CONTAINER [CONTAINER...]", "Restart a running container")
-	nSeconds := cmd.Int("t", 10, "wait t seconds before killing the container")
+	nSeconds := cmd.Int("t", 10, "Number of seconds to try to stop for before killing the container. Once killed it will then be restarted. Default=10")
 	if err := cmd.Parse(args); err != nil {
 		return nil
 	}
@@ -638,7 +647,7 @@ func (cli *DockerCli) CmdPort(args ...string) error {
 
 // 'docker rmi IMAGE' removes all images with the name IMAGE
 func (cli *DockerCli) CmdRmi(args ...string) error {
-	cmd := Subcmd("rmi", "IMAGE [IMAGE...]", "Remove an image")
+	cmd := Subcmd("rmi", "IMAGE [IMAGE...]", "Remove one or more images")
 	if err := cmd.Parse(args); err != nil {
 		return nil
 	}
@@ -703,7 +712,7 @@ func (cli *DockerCli) CmdHistory(args ...string) error {
 }
 
 func (cli *DockerCli) CmdRm(args ...string) error {
-	cmd := Subcmd("rm", "[OPTIONS] CONTAINER [CONTAINER...]", "Remove a container")
+	cmd := Subcmd("rm", "[OPTIONS] CONTAINER [CONTAINER...]", "Remove one or more containers")
 	v := cmd.Bool("v", false, "Remove the volumes associated to the container")
 	if err := cmd.Parse(args); err != nil {
 		return nil
@@ -773,7 +782,7 @@ func (cli *DockerCli) CmdImport(args ...string) error {
 }
 
 func (cli *DockerCli) CmdPush(args ...string) error {
-	cmd := Subcmd("push", "[OPTION] NAME", "Push an image or a repository to the registry")
+	cmd := Subcmd("push", "NAME", "Push an image or a repository to the registry")
 	if err := cmd.Parse(args); err != nil {
 		return nil
 	}
@@ -1099,10 +1108,7 @@ func (cli *DockerCli) CmdLogs(args ...string) error {
 		return nil
 	}
 
-	if err := cli.hijack("POST", "/containers/"+cmd.Arg(0)+"/attach?logs=1&stdout=1", false, nil, cli.out); err != nil {
-		return err
-	}
-	if err := cli.hijack("POST", "/containers/"+cmd.Arg(0)+"/attach?logs=1&stderr=1", false, nil, cli.err); err != nil {
+	if err := cli.hijack("POST", "/containers/"+cmd.Arg(0)+"/attach?logs=1&stdout=1&stderr=1", false, nil, cli.out); err != nil {
 		return err
 	}
 	return nil
@@ -1249,10 +1255,22 @@ func (opts PathOpts) String() string {
 }
 
 func (opts PathOpts) Set(val string) error {
-	if !filepath.IsAbs(val) {
-		return fmt.Errorf("%s is not an absolute path", val)
+	var containerPath string
+
+	splited := strings.SplitN(val, ":", 2)
+	if len(splited) == 1 {
+		containerPath = splited[0]
+		val = filepath.Clean(splited[0])
+	} else {
+		containerPath = splited[1]
+		val = fmt.Sprintf("%s:%s", splited[0], filepath.Clean(splited[1]))
 	}
-	opts[filepath.Clean(val)] = struct{}{}
+
+	if !filepath.IsAbs(containerPath) {
+		utils.Debugf("%s is not an absolute path", containerPath)
+		return fmt.Errorf("%s is not an absolute path", containerPath)
+	}
+	opts[val] = struct{}{}
 	return nil
 }
 
@@ -1293,6 +1311,18 @@ func (cli *DockerCli) CmdRun(args ...string) error {
 		return nil
 	}
 
+	var containerIDFile *os.File
+	if len(hostConfig.ContainerIDFile) > 0 {
+		if _, err := ioutil.ReadFile(hostConfig.ContainerIDFile); err == nil {
+			return fmt.Errorf("cid file found, make sure the other container isn't running or delete %s", hostConfig.ContainerIDFile)
+		}
+		containerIDFile, err = os.Create(hostConfig.ContainerIDFile)
+		if err != nil {
+			return fmt.Errorf("failed to create the container ID file: %s", err)
+		}
+		defer containerIDFile.Close()
+	}
+
 	//create the container
 	body, statusCode, err := cli.call("POST", "/containers/create", config)
 	//if image not found try to pull it
@@ -1322,6 +1352,11 @@ func (cli *DockerCli) CmdRun(args ...string) error {
 
 	for _, warning := range runResult.Warnings {
 		fmt.Fprintf(cli.err, "WARNING: %s\n", warning)
+	}
+	if len(hostConfig.ContainerIDFile) > 0 {
+		if _, err = containerIDFile.WriteString(runResult.ID); err != nil {
+			return fmt.Errorf("failed to write the container ID to the file: %s", err)
+		}
 	}
 
 	//start the container
