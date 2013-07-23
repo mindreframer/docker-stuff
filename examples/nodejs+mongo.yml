@@ -1,0 +1,22 @@
+--environment:
+--  name: Node.js / Mongo Deployment Platform
+--  version: 0.1
+containers:
+  nodejs: 
+    base_image: kstaken/nodejs
+    config:
+      command: /usr/bin/node /var/www/app.js
+      detach: true
+      ports: 
+        - '8100:80'  
+      environment:
+        - PORT=80
+    require:
+      mongodb: 
+        port: '27017'
+  mongodb:     
+    base_image: kstaken/mongodb
+    config:
+      command: /usr/bin/mongod --config /etc/mongodb.conf
+      detach: true
+      

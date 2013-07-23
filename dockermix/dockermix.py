@@ -1,70 +1,111 @@
 import docker
-import os, sys, time, subprocess, yaml, shutil, copy
-import logging
+import os, sys, yaml, copy, StringIO
 import dockermix
 from requests.exceptions import HTTPError
+from .container import Container
+import utils
+
+class ContainerError(Exception):
+  pass
 
 class ContainerMix:
   def __init__(self, conf_file=None, environment=None):
-    self._setupLogging()
+    self.log = utils._setupLogging()
     self.containers = {}
     
     if environment:
-      self.load(environment)
+      self.load(environment)      
     else:
       if not conf_file.startswith('/'):
         conf_file = os.path.join(os.path.dirname(sys.argv[0]), conf_file)
 
       data = open(conf_file, 'r')
-      self.config = yaml.load(data)      
+      self.config = yaml.load(data)
+      
+    # On load order containers into the proper startup sequence      
+    self.start_order = utils.order(self.config['containers'])
 
   def get(self, container):
     return self.containers[container]
 
-  def build(self):
-    for container in self.config['containers']:
-      #TODO: confirm base_image exists
+  def build(self, wait_time=60):
+    for container in self.start_order:      
       if not self.config['containers'][container]:
         sys.stderr.write("Error: no configuration found for container: " + container + "\n")
         exit(1)
 
-      if 'base_image' not in self.config['containers'][container]:
+      config = self.config['containers'][container]
+      if 'base_image' not in config:
         sys.stderr.write("Error: no base image specified for container: " + container)
         exit(1)
 
-      base = self.config['containers'][container]['base_image']
-        
-      self.log.info('Building container: %s using base template %s', container, base)
-      
-      build = Container(container, self.config['containers'][container])
-      dockerfile = None
-      if 'dockerfile' in self.config['containers'][container]:
-        dockerfile = self.config['containers'][container]['dockerfile']
-      build.build(dockerfile)
+      base = config['base_image']
 
-      self.containers[container] = build
+      self._handleRequire(container, wait_time)
+      
+      # If count is defined in the config then we're launching multiple instances of the same thing
+      # and they'll need to be tagged accordingly. Count only applies on build.
+      count = tag_name = 1
+      if 'count' in config:
+        count = tag_name = config['count']  
+      
+      while count > 0:      
+        name = container
+        if tag_name > 1:
+          name = name + "__" + str(count)
+
+        self.log.info('Building container: %s using base template %s', name, base)
+      
+        build = Container(name, copy.deepcopy(config))
+        dockerfile = None
+        if 'buildspec' in config:
+          if 'dockerfile' in config['buildspec']:      
+            dockerfile = config['buildspec']['dockerfile']
+          if 'url' in config['buildspec']:  
+            # TODO: this doesn't do anything yet
+            dockerfile_url = config['buildspec']['url']
+
+        build.build(dockerfile)
+
+        self.containers[name] = build
+        count = count - 1
       
   def destroy(self):
     for container in self.containers:
       self.log.info('Destroying container: %s', container)      
       self.containers[container].destroy()     
 
-  def start(self):
-    for container in self.containers:      
-      self.containers[container].start()
+  def start(self, container=None, wait_time=60):
+    # If a container is provided we just start that container
+    # TODO: may need an abstraction here to handle names of multi-container groups
+    if container:
+      self.log.info('Starting container: %s', container)      
+      self.containers[container].start()  
+    else:
+      for container in self.start_order:
+        self.log.info('Starting container: %s', container)      
+        
+        self._handleRequire(container, wait_time)
+        
+        self.containers[container].start()
 
-  def stop(self):
-    for container in self.containers:      
+  def stop(self, container=None):
+    if container:
+      self.log.info('Stopping container: %s', container)      
       self.containers[container].stop()
+    else:
+      for container in self.containers:     
+        self.log.info('Stopping container: %s', container)      
+        self.containers[container].stop()
 
   def load(self, filename='envrionment.yml'):
     self.log.info('Loading environment from: %s', filename)      
     
     with open(filename, 'r') as input_file:
-      environment = yaml.load(input_file)
+      self.config = yaml.load(input_file)
 
-      for container in environment['containers']:
-        self.containers[container] = Container(container, environment['containers'][container])
+      for container in self.config['containers']:
+        self.containers[container] = Container(container, self.config['containers'][container])
     
   def save(self, filename='environment.yml'):
     self.log.info('Saving environment state to: %s', filename)      
@@ -76,7 +117,7 @@ class ContainerMix:
     columns = "{0:<14}{1:<19}{2:<34}{3:<11}\n" 
     result = columns.format("ID", "NODE", "COMMAND", "STATUS")
     for container in self.containers:
-      container_id = self.containers[container].config['container_id']
+      container_id = self.containers[container].desc['container_id']
       
       node_name = (container[:15] + '..') if len(container) > 17 else container
 
@@ -100,87 +141,52 @@ class ContainerMix:
     result = {}
     result['containers'] = {}
     for container in self.containers:      
-      output = result['containers'][container] = self.containers[container].config
+      output = result['containers'][container] = self.containers[container].desc
 
     return yaml.dump(result, Dumper=yaml.SafeDumper)
 
-  def _setupLogging(self):
-    self.log = logging.getLogger('dockermix')
-    self.log.setLevel(logging.DEBUG)
-
-    formatter = logging.Formatter("%(asctime)s %(levelname)-10s %(message)s")
-    filehandler = logging.FileHandler('dockermix.log', 'w')
-    filehandler.setLevel(logging.DEBUG)
-    filehandler.setFormatter(formatter)
-    self.log.addHandler(filehandler)  
-
-
-class Container:
-  def __init__(self, name, config={}, build_tag=None):
-    self.log = logging.getLogger('dockermix')
-
-    self.config = config
-    self.name = name
+  def _pollService(self, container, service, port, wait_time):
+    # Based on start_order the service should already be running
+    service_ip = self.containers[service].get_ip_address()
+    self.log.info('Starting %s: waiting for service %s on ip %s and port %s', container, service, service_ip, port)            
     
-    self.build_tag = build_tag
-    if not build_tag:
-      self.build_tag = name + '-' + str(os.getpid())
+    result = utils.waitForService(service_ip, int(port), wait_time)
+    if result < 0:
+      self.log.error('Never found service %s on port %s', service, port)
+      raise ContainerError("Couldn't find required services, aborting")
 
-    if 'command' not in self.config:
-      sys.stderr.write("Error: No command specified for container " + name + "\n")
-      self.log.error('No command specified in configuration')   
-      exit(1)  
-      #self.config['command'] = '/bin/true'
-    
-    self.docker_client = docker.Client()
-    
-    if 'base_image' not in self.config:
-      self.config['base_image'] = 'ubuntu'
+    return service_ip + ":" + str(port)
+
+  def _handleRequire(self, container, wait_time):
+    env = []
+    # Wait for any required services to finish registering        
+    config = self.config['containers'][container]
+    if 'require' in config:
+      try:
+        # Containers can depend on mulitple services
+        for service in config['require']:
+          service_env = []
+          port = config['require'][service]['port']          
+          if port:
+            # If count is defined then we need to wait for all instances to start                    
+            count = config['require'][service].get('count', 1)          
+            if count > 1:
+              while count > 0:
+                name = service + "__" + str(count)
+                service_env.append(self._pollService(container, name, port, wait_time))
+                count = count - 1                
+            else:
+              service_env.append(self._pollService(container, service, port, wait_time))
+
+            env.append(service.upper() + "=" + " ".join(service_env))
+      except:
+        self.log.error('Failure on require. Shutting down the environment')
+        self.destroy()
+        raise
       
-  def build(self, dockerfile=None):
-    if dockerfile:        
-      self._build_container(dockerfile)
-    else:
-      # If there's no dockerfile then we're just launching an empty base    
-      self.config['image_id'] = self.config['base_image']
+      # Setup the env for dependent services
+      if 'environment' in config['config']:
+        config['config']['environment'] += env
+      else:
+        config['config']['environment'] = env
     
-    self._start_container()
-    
-  def destroy(self):
-    self.stop()
-    self.docker_client.remove_container(self.config['container_id'])    
-    self.docker_client.remove_image(self.build_tag)
-
-  def start(self):
-    self.docker_client.start(self.config['container_id'])
-  
-  def stop(self):
-    self.docker_client.stop(self.config['container_id'])
-    
-  def _build_container(self, dockerfile):
-    # Build the container
-    result = self.docker_client.build(dockerfile.split('\n'))
-    # Commented out until my pull request to add logger configuration gets merged into docker-py
-    #result = self.docker_client.build(dockerfile.split('\n'), logger=self.log)
-    
-    self.config['image_id'] = result[0]
-    
-    # Tag the container with the name and process id
-    self.docker_client.tag(self.config['image_id'], self.build_tag)
-    self.log.info('Container registered with tag: %s', self.build_tag)      
-
-  def _start_container(self):
-    # Start the container
-    clean_config = self._clean_config(self.config, ['image_id', 'base_image', 'dockerfile'])
-    self.config['container_id'] = self.docker_client.create_container(self.config['image_id'], **clean_config)['Id']
-    
-    self.start()
-
-    self.log.info('Container started: %s', self.build_tag)     
-
-  # Get rid of unused keys so that we can do parameter expansion
-  def _clean_config(self, config, keys):
-    result = copy.deepcopy(config) 
-    for key in keys:
-      result.pop(key, None)
-    return result
