@@ -10,13 +10,13 @@ import (
 	"fmt"
 	"github.com/globocom/config"
 	"github.com/globocom/tsuru/app"
+	"github.com/globocom/tsuru/cmd"
 	"github.com/globocom/tsuru/db"
 	"github.com/globocom/tsuru/exec"
 	"github.com/globocom/tsuru/log"
 	"github.com/globocom/tsuru/provision"
 	"github.com/globocom/tsuru/router"
 	_ "github.com/globocom/tsuru/router/hipache"
-	_ "github.com/globocom/tsuru/router/nginx"
 	_ "github.com/globocom/tsuru/router/testing"
 	"io"
 	"io/ioutil"
@@ -44,7 +44,7 @@ func executor() exec.Executor {
 	return execut
 }
 
-func Router() (router.Router, error) {
+func getRouter() (router.Router, error) {
 	r, err := config.GetString("docker:router")
 	if err != nil {
 		return nil, err
@@ -56,7 +56,7 @@ type dockerProvisioner struct{}
 
 // Provision creates a route for the container
 func (p *dockerProvisioner) Provision(app provision.App) error {
-	r, err := Router()
+	r, err := getRouter()
 	if err != nil {
 		log.Printf("Failed to get router: %s", err.Error())
 		return err
@@ -117,7 +117,7 @@ func startInBackground(a provision.App, c container, imageId string, w io.Writer
 }
 
 func (dockerProvisioner) Swap(app1, app2 provision.App) error {
-	r, err := Router()
+	r, err := getRouter()
 	if err != nil {
 		log.Printf("Failed to get router: %s", err.Error())
 		return err
@@ -178,10 +178,11 @@ func (p *dockerProvisioner) Destroy(app provision.App) error {
 	containers, _ := listAppContainers(app.GetName())
 	for _, c := range containers {
 		go func(c container) {
+			removeImage(c.Image)
 			removeContainer(&c)
 		}(c)
 	}
-	r, err := Router()
+	r, err := getRouter()
 	if err != nil {
 		log.Printf("Failed to get router: %s", err.Error())
 		return err
@@ -190,7 +191,7 @@ func (p *dockerProvisioner) Destroy(app provision.App) error {
 }
 
 func (*dockerProvisioner) Addr(app provision.App) (string, error) {
-	r, err := Router()
+	r, err := getRouter()
 	if err != nil {
 		log.Printf("Failed to get router: %s", err.Error())
 		return "", err
@@ -252,9 +253,6 @@ func removeContainer(c *container) error {
 	err = c.remove()
 	if err != nil {
 		log.Printf("error on remove container %s - %s", c.ID, err)
-	}
-	if c.Image != "" {
-		removeImage(c.Image)
 	}
 	return err
 }
@@ -357,7 +355,7 @@ func buildResult(maxSize int, units <-chan provision.Unit) <-chan []provision.Un
 }
 
 func fixContainer(container *container, ip, port string) error {
-	router, err := Router()
+	router, err := getRouter()
 	if err != nil {
 		return err
 	}
@@ -372,7 +370,7 @@ func fixContainer(container *container, ip, port string) error {
 }
 
 func (p *dockerProvisioner) SetCName(app provision.App, cname string) error {
-	r, err := Router()
+	r, err := getRouter()
 	if err != nil {
 		return err
 	}
@@ -380,11 +378,19 @@ func (p *dockerProvisioner) SetCName(app provision.App, cname string) error {
 }
 
 func (p *dockerProvisioner) UnsetCName(app provision.App, cname string) error {
-	r, err := Router()
+	r, err := getRouter()
 	if err != nil {
 		return err
 	}
 	return r.UnsetCName(cname, app.GetName())
+}
+
+func (p *dockerProvisioner) Commands() []cmd.Command {
+	return []cmd.Command{
+		addNodeToSchedulerCmd{},
+		removeNodeFromSchedulerCmd{},
+		listNodesInTheSchedulerCmd{},
+	}
 }
 
 func collection() *mgo.Collection {

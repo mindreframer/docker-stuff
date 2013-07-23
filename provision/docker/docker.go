@@ -12,6 +12,7 @@ import (
 	dclient "github.com/fsouza/go-dockerclient"
 	"github.com/globocom/config"
 	"github.com/globocom/docker-cluster/cluster"
+	"github.com/globocom/docker-cluster/storage"
 	"github.com/globocom/tsuru/action"
 	"github.com/globocom/tsuru/fs"
 	"github.com/globocom/tsuru/log"
@@ -44,7 +45,19 @@ func dockerCluster() *cluster.Cluster {
 			}
 			nodes = append(nodes, node)
 		}
-		dCluster, _ = cluster.New(nil, nodes...)
+		if segregate, _ := config.GetBool("docker:segregate"); segregate {
+			var scheduler segregatedScheduler
+			dCluster, _ = cluster.New(&scheduler, nodes...)
+		} else {
+			dCluster, _ = cluster.New(nil, nodes...)
+		}
+		if redisServer, err := config.GetString("docker:scheduler:redis-server"); err == nil {
+			if password, err := config.GetString("docker:scheduler:redis-password"); err == nil {
+				dCluster.SetStorage(storage.AuthenticatedRedis(redisServer, password))
+			} else {
+				dCluster.SetStorage(storage.Redis(redisServer))
+			}
+		}
 	}
 	return dCluster
 }
@@ -252,7 +265,7 @@ func (c *container) remove() error {
 		log.Printf("Failed to remove container from database: %s", err.Error())
 		return err
 	}
-	r, err := Router()
+	r, err := getRouter()
 	if err != nil {
 		log.Printf("Failed to obtain router: %s", err.Error())
 		return err
@@ -291,7 +304,7 @@ func (c *container) commit() (string, error) {
 		log.Printf("Could not commit docker image: %s", err.Error())
 		return "", err
 	}
-	log.Printf("image %s gerenated from container %s", image.ID, c.ID)
+	log.Printf("image %s generated from container %s", image.ID, c.ID)
 	replicateImage(opts.Repository)
 	return repository, nil
 }

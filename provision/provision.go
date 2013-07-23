@@ -8,6 +8,7 @@ package provision
 
 import (
 	"fmt"
+	"github.com/globocom/tsuru/cmd"
 	"io"
 )
 
@@ -137,6 +138,12 @@ type Provisioner interface {
 	Swap(App, App) error
 }
 
+// Commandable is a provisioner that provides commands to extend the tsr
+// command line interface.
+type Commandable interface {
+	Commands() []cmd.Command
+}
+
 var provisioners = make(map[string]Provisioner)
 
 // Register registers a new provisioner in the Provisioner registry.
@@ -151,6 +158,15 @@ func Get(name string) (Provisioner, error) {
 		return nil, fmt.Errorf("Unknown provisioner: %q.", name)
 	}
 	return p, nil
+}
+
+// Registry returns the list of registered provisioners.
+func Registry() []Provisioner {
+	registry := make([]Provisioner, 0, len(provisioners))
+	for _, p := range provisioners {
+		registry = append(registry, p)
+	}
+	return registry
 }
 
 type Error struct {

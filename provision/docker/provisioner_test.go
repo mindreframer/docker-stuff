@@ -9,6 +9,7 @@ import (
 	"fmt"
 	dockerClient "github.com/fsouza/go-dockerclient"
 	"github.com/globocom/docker-cluster/cluster"
+	"github.com/globocom/tsuru/cmd"
 	"github.com/globocom/tsuru/exec"
 	etesting "github.com/globocom/tsuru/exec/testing"
 	"github.com/globocom/tsuru/log"
@@ -224,7 +225,7 @@ func (s *S) TestProvisionerAddr(c *gocheck.C) {
 	var p dockerProvisioner
 	addr, err := p.Addr(app)
 	c.Assert(err, gocheck.IsNil)
-	r, err := Router()
+	r, err := getRouter()
 	c.Assert(err, gocheck.IsNil)
 	expected, err := r.Addr(cont.AppName)
 	c.Assert(err, gocheck.IsNil)
@@ -569,10 +570,21 @@ func (s *S) TestProvisionUnsetCName(c *gocheck.C) {
 }
 
 func (s *S) TestProvisionerIsCNameManager(c *gocheck.C) {
-	var p interface{}
-	p = &dockerProvisioner{}
-	_, ok := p.(provision.CNameManager)
-	c.Assert(ok, gocheck.Equals, true)
+	var _ provision.CNameManager = &dockerProvisioner{}
+}
+
+func (s *S) TestCommands(c *gocheck.C) {
+	var p dockerProvisioner
+	expected := []cmd.Command{
+		addNodeToSchedulerCmd{},
+		removeNodeFromSchedulerCmd{},
+		listNodesInTheSchedulerCmd{},
+	}
+	c.Assert(p.Commands(), gocheck.DeepEquals, expected)
+}
+
+func (s *S) TestProvisionerIsCommandable(c *gocheck.C) {
+	var _ provision.Commandable = &dockerProvisioner{}
 }
 
 func (s *S) TestSwap(c *gocheck.C) {

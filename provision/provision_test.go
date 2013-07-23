@@ -1,4 +1,4 @@
-// Copyright 2012 tsuru authors. All rights reserved.
+// Copyright 2013 tsuru authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -6,51 +6,59 @@ package provision
 
 import (
 	"errors"
+	"launchpad.net/gocheck"
 	"reflect"
 	"testing"
 )
 
-func TestRegisterAndGetProvisioner(t *testing.T) {
+type ProvisionSuite struct{}
+
+var _ = gocheck.Suite(ProvisionSuite{})
+
+func Test(t *testing.T) {
+	gocheck.TestingT(t)
+}
+
+func (ProvisionSuite) TestRegisterAndGetProvisioner(c *gocheck.C) {
 	var p Provisioner
 	Register("my-provisioner", p)
 	got, err := Get("my-provisioner")
-	if err != nil {
-		t.Fatalf("Got unexpected error when getting provisioner: %q", err)
-	}
-	if !reflect.DeepEqual(p, got) {
-		t.Errorf("Get: Want %#v. Got %#v.", p, got)
-	}
+	c.Assert(err, gocheck.IsNil)
+	c.Check(got, gocheck.DeepEquals, p)
 	_, err = Get("unknown-provisioner")
-	if err == nil {
-		t.Errorf("Expected non-nil error when getting unknown provisioner, got <nil>.")
-	}
+	c.Check(err, gocheck.NotNil)
 	expectedMessage := `Unknown provisioner: "unknown-provisioner".`
-	if err.Error() != expectedMessage {
-		t.Errorf("Expected error %q. Got %q.", expectedMessage, err.Error())
+	c.Assert(err.Error(), gocheck.Equals, expectedMessage)
+}
+
+func (ProvisionSuite) TestRegistry(c *gocheck.C) {
+	var p1, p2 Provisioner
+	Register("my-provisioner", p1)
+	Register("your-provisioner", p2)
+	provisioners := Registry()
+	alt1 := []Provisioner{p1, p2}
+	alt2 := []Provisioner{p2, p1}
+	if !reflect.DeepEqual(provisioners, alt1) && !reflect.DeepEqual(provisioners, alt2) {
+		c.Errorf("Registry(): Expected %#v. Got %#v.", alt1, provisioners)
 	}
 }
 
-func TestError(t *testing.T) {
+func (ProvisionSuite) TestError(c *gocheck.C) {
 	errs := []*Error{
 		{Reason: "something", Err: errors.New("went wrong")},
 		{Reason: "something went wrong"},
 	}
 	expected := []string{"went wrong: something", "something went wrong"}
 	for i := range errs {
-		if errs[i].Error() != expected[i] {
-			t.Errorf("Error.Error(): want %q. Got %q.", expected[i], errs[i].Error())
-		}
+		c.Check(errs[i].Error(), gocheck.Equals, expected[i])
 	}
 }
 
-func TestErrorImplementsError(t *testing.T) {
+func (ProvisionSuite) TestErrorImplementsError(c *gocheck.C) {
 	var _ error = &Error{}
 }
 
-func TestStatusString(t *testing.T) {
+func (ProvisionSuite) TestStatusString(c *gocheck.C) {
 	var s Status = "pending"
-	got := s.String()
-	if got != "pending" {
-		t.Errorf("Status.String(). want \"pending\". Got %q.", got)
-	}
+	c.Assert(s.String(), gocheck.Equals, "pending")
 }
