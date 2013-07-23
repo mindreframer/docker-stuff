@@ -106,6 +106,10 @@ Articles:
       Dockerized MongoDB (with SSHD)
        3 commits, last change: 2013-06-12 21:32:17, 2 stars, 0 forks
 
+    kencochrane/docker-tutorial:
+      Docker Guidebook
+       29 commits, last change: 2013-07-18 04:36:17, 15 stars, 2 forks
+
     kstaken/dockerfile-examples:
       Some example dockerfiles for use with Docker
        17 commits, last change: 2013-07-08 17:51:34, 3 stars, 1 forks
