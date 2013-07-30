@@ -255,24 +255,20 @@ func (c *container) remove() error {
 	err := dockerCluster().RemoveContainer(c.ID)
 	if err != nil {
 		log.Printf("Failed to remove container from docker: %s", err)
-		return err
 	}
 	runCmd("ssh-keygen", "-R", c.IP)
 	log.Printf("Removing container %s from database", c.ID)
 	coll := collection()
 	defer coll.Database.Session.Close()
 	if err := coll.RemoveId(c.ID); err != nil {
-		log.Printf("Failed to remove container from database: %s", err.Error())
-		return err
+		log.Printf("Failed to remove container from database: %s", err)
 	}
 	r, err := getRouter()
 	if err != nil {
-		log.Printf("Failed to obtain router: %s", err.Error())
-		return err
+		log.Printf("Failed to obtain router: %s", err)
 	}
 	if err := r.RemoveRoute(c.AppName, address); err != nil {
-		log.Printf("Failed to remove route: %s", err.Error())
-		return err
+		log.Printf("Failed to remove route: %s", err)
 	}
 	return nil
 }
@@ -296,8 +292,7 @@ func (c *container) ssh(stdout, stderr io.Writer, cmd string, args ...string) er
 // and returns the image repository.
 func (c *container) commit() (string, error) {
 	log.Printf("commiting container %s", c.ID)
-	repoNamespace, _ := config.GetString("docker:repository-namespace")
-	repository := repoNamespace + "/" + c.AppName
+	repository := buildImageName(c.AppName)
 	opts := dclient.CommitContainerOptions{Container: c.ID, Repository: repository}
 	image, err := dockerCluster().CommitContainer(opts)
 	if err != nil {
@@ -305,7 +300,7 @@ func (c *container) commit() (string, error) {
 		return "", err
 	}
 	log.Printf("image %s generated from container %s", image.ID, c.ID)
-	replicateImage(opts.Repository)
+	replicateImage(repository)
 	return repository, nil
 }
 
@@ -401,7 +396,10 @@ func (e *cmdError) Error() string {
 func replicateImage(name string) error {
 	var buf bytes.Buffer
 	if registry, err := config.GetString("docker:registry"); err == nil {
-		pushOpts := dclient.PushImageOptions{Name: name, Registry: registry}
+		if !strings.HasPrefix(name, registry) {
+			name = registry + "/" + name
+		}
+		pushOpts := dclient.PushImageOptions{Name: name}
 		err := dockerCluster().PushImage(pushOpts, &buf)
 		if err != nil {
 			log.Printf("[docker] Failed to push image %q (%s): %s", name, err, buf.String())
@@ -416,4 +414,15 @@ func replicateImage(name string) error {
 		}
 	}
 	return nil
+}
+
+func buildImageName(appName string) string {
+	parts := make([]string, 0, 3)
+	registry, _ := config.GetString("docker:registry")
+	if registry != "" {
+		parts = append(parts, registry)
+	}
+	repoNamespace, _ := config.GetString("docker:repository-namespace")
+	parts = append(parts, repoNamespace, appName)
+	return strings.Join(parts, "/")
 }
