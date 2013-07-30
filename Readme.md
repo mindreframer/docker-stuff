@@ -100,10 +100,6 @@ Articles:
       Puppet module that installs and configures docker registry with opinionated defaults.
        12 commits, last change: , 1 stars, 0 forks
 
-    jamescarr/puppet-docker-registry:
-      Puppet module that installs and configures docker registry with opinionated defaults.
-       12 commits, last change: , 1 stars, 0 forks
-
     justone/docker-mongodb:
       Dockerized MongoDB (with SSHD)
        3 commits, last change: 2013-06-12 21:32:17, 3 stars, 0 forks
@@ -115,10 +111,6 @@ Articles:
     kstaken/dockerfile-examples:
       Some example dockerfiles for use with Docker
        27 commits, last change: 2013-07-19 14:34:16, 5 stars, 2 forks
-
-    kstaken/dockermix:
-      Manage multi-container Docker environments - Development has moved to: https://github.com/toscanini/maestro
-       79 commits, last change: 2013-07-23 18:29:02, 22 stars, 0 forks
 
     kstaken/dockermix:
       Manage multi-container Docker environments - Development has moved to: https://github.com/toscanini/maestro
