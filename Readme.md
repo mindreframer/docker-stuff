@@ -46,7 +46,7 @@ Articles:
 
     crosbymichael/dockerui:
       A web interface for docker. http://docker.io
-       54 commits, last change: 2013-06-23 19:32:50, 163 stars, 10 forks
+       56 commits, last change: 2013-07-15 05:10:11, 193 stars, 17 forks
 
     dotcloud/docker-registry:
       Registry server for Docker (hosting/delivering of repositories and images)
@@ -54,7 +54,7 @@ Articles:
 
     dotcloud/docker:
       Docker - the Linux container runtime
-       1000+ commits, last change: 2013-07-10 07:52:30, 3,852 stars, 365 forks
+       2,535 commits, last change: 2013-07-26 02:40:56, 4,201 stars, 401 forks
 
     dotcloud/dockerlite:
       Lightweight virtualization system based on LXC and BTRFS. See dotcloud/docker.
@@ -94,7 +94,7 @@ Articles:
 
     globocom/tsuru:
       Open source Platform as a Service.
-       1000+ commits, last change: 2013-07-10 07:54:36, 549 stars, 43 forks
+       5,647 commits, last change: 2013-07-24 07:45:20, 564 stars, 44 forks
 
     jamescarr/puppet-docker-registry:
       Puppet module that installs and configures docker registry with opinionated defaults.
@@ -151,4 +151,8 @@ Articles:
     swipely/docker-api:
       A lightweight Ruby client for the Docker Remote API
        110 commits, last change: 2013-07-05 19:30:37, 6 stars, 2 forks
+
+    toscanini/maestro:
+      Container orchestration for Docker environments
+       109 commits, last change: 2013-07-28 22:22:19, 37 stars, 0 forks
 <!-- PROJECTS_LIST_END -->
