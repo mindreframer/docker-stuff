@@ -794,7 +794,25 @@ If you are a big fan of Docker, and want to know how to help out, then look at t
     - Mailing list
 - Attend the Docker hack days and meet other Docker users, and let us know how we can make Docker even better.
 - Get a `Docker` sticker, and display it proudly.
-- Wear your Docker shirt and wear it around town all day.
+- Wear your Docker shirt around town all day.
+
+
+Tips and Tricks
+===============
+This section includes some helpful tips and tricks that will make using Docker even more easier and fun.
+
+Remove all Docker images
+------------------------
+::
+
+    $ docker rmi `docker images -a -q`
+
+Remove all Docker containers
+----------------------------
+::
+
+    $ docker rm `docker ps -a -q`
+
 
 
 Docker Commands
@@ -803,7 +821,7 @@ Here is a list of all of the current Docker commands, the different parameters t
 
 attach
 ------
-Attach to a running container.
+Attach to a running container. To disconnect press Ctrl+P, Ctrl+Q.
 
 Parameters
 ~~~~~~~~~~
@@ -820,6 +838,7 @@ Example
 ::
 
     docker attach afs232ybh2123d
+    # To disconnect press Ctrl+P, Ctrl+Q.
 
 build
 -----
@@ -1616,6 +1635,7 @@ Login with prompts
 Login with parameters
 ^^^^^^^^^^^^^^^^^^^^^
 ::
+
     $ docker login -u myusername -p mypassword -e myusername@example.com
     Login Succeeded
 
@@ -2131,8 +2151,8 @@ Examples
 ::
 
     $ docker version
-    Client version: 0.4.8
-    Server version: 0.4.8
+    Client version: 0.5.0
+    Server version: 0.5.0
     Go version: go1.1
 
 
