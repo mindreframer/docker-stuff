@@ -1,0 +1,59 @@
+--environment:
+--  name: Node.js / Mongo Deployment Platform
+--  version: 0.1
+-- What needs to be configured here at instantiation:
+--    External port
+--    Source for the application state
+--    Possibly commands to run?
+--    Name for the environment comes when the environment is created
+environment:
+  description: Node.js / MongoDB deployment platform
+
+  services:
+    mongohq:
+      description: Encapsulation of the mongohq external service
+      host: db.mongohq.com
+      port: 27017
+      config:
+        user: {{ mongohq_user }} -- Set as MONGOHQ_USER in env of any dependenct containers
+        password: {{ mongohq_password }} -- Set as MONGOHQ_PASSWORD 
+
+    mongodb: -- only useful to services
+      description: MongoDB Database service
+      version: 0.1
+      exposes: 27017
+      templates:
+        mongodb: -- only useful to templates
+          base_image: kstaken/mongodb
+          config: -- only useful to containers
+            command: /usr/bin/mongod --config /etc/mongodb.conf
+            detach: true  
+
+
+    nodejs:
+      description: Deployment service for Node.js
+      templates:
+        nodejs: 
+          base_image: kstaken/nodejs
+          config:
+            command: /usr/bin/node /var/www/app.js
+            detach: true
+            ports: 
+              - '{{ public_port }}:80'
+            environment:
+              - PORT=80
+          require:
+            tosca_file: -- Platform provided service
+              mount: /var/www
+
+      require:
+        mongodb: 
+          port: '27017'
+      
+  defaults:
+      public_port: '8100'
+      tosca_file.mount: /tmp/
+      mongohq_user: default
+      mongohq_password: default
+
+-- --nodejs:mount=/vagrant/nodejs
