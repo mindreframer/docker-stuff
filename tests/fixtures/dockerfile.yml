@@ -1,0 +1,20 @@
+templates:
+  test_server_1: 
+    base_image: ubuntu
+    config:
+      command: ns -l 8080 -k
+    buildspec: 
+      dockerfile: |
+        FROM ubuntu
+        
+        RUN apt-get update
+        RUN apt-get -y install netcat
+        
+  test_server_2: 
+    base_image: ubuntu
+    config:
+      command: 'ls -l'    
+    buildspec:
+      url: github.com/toscanini/maestro-dockerfile-test
+      tags:
+        - kstaken/test_server_2

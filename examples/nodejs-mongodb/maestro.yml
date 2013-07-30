@@ -1,0 +1,23 @@
+--environment:
+--  name: Node.js / Mongo Deployment Platform
+--  version: 0.1
+templates:
+  nodejs: 
+    config:
+      command: /usr/bin/node /var/www/app.js      
+      ports: 
+        - '80'  
+      environment:
+        - PORT=80
+    buildspec:
+      url: github.com/toscanini/docker-nodejs
+    require:
+      mongodb: 
+        port: '27017'
+  mongodb:     
+    config:
+      command: /usr/bin/mongod --config /etc/mongodb.conf      
+    buildspec:
+      url: github.com/toscanini/docker-mongodb
+    
+      

@@ -1,0 +1,15 @@
+templates:
+  salt_master: 
+    config:
+      command: /usr/bin/supervisord -n -c /etc/supervisor/supervisord.conf
+    buildspec:
+      url: github.com/toscanini/docker-salt-master
+  salt_minion:     
+    count: 10
+    config:
+      command: /usr/bin/supervisord -n -c /etc/supervisor/supervisord.conf
+    buildspec:
+      url: github.com/toscanini/docker-salt-minion
+    require:
+      salt_master: 
+        port: '4505'

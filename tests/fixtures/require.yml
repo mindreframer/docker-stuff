@@ -1,0 +1,31 @@
+templates:
+  test_server_1: 
+    base_image: ubuntu
+    config:
+      ports: 
+        - '8080' 
+      command: '/bin/bash -c "apt-get install netcat ; nc -l 8080 -k"' 
+      hostname: test_server_1 
+      detach: true
+    require:
+      test_server_2:
+        port: '8080'
+  test_server_2: 
+    base_image: ubuntu
+    config:
+      ports: 
+        - '8080' 
+      command: '/bin/bash -c "apt-get install netcat ; nc -l 8080 -k"' 
+      hostname: test_server_2
+      detach: true
+  test_server_3: 
+    base_image: ubuntu
+    config:
+      ports: 
+        - '8080' 
+      command: '/bin/bash -c "apt-get install netcat ; nc -l 8080 -k"' 
+      hostname: test_server_2
+      detach: true
+    require:
+      test_server_1:
+        port: '8080'
