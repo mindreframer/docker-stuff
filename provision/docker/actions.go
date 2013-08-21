@@ -30,33 +30,17 @@ var createContainer = action.Action{
 	},
 }
 
-var setIp = action.Action{
-	Name: "set-ip",
+var setNetworkInfo = action.Action{
+	Name: "set-network-info",
 	Forward: func(ctx action.FWContext) (action.Result, error) {
 		c := ctx.Previous.(container)
-		ip, err := c.ip()
+		ip, hostPort, err := c.networkInfo()
 		if err != nil {
 			return nil, err
 		}
 		c.IP = ip
-		return c, nil
-	},
-	Backward: func(ctx action.BWContext) {
-	},
-}
-
-var setHostPort = action.Action{
-	Name: "set-host-port",
-	Forward: func(ctx action.FWContext) (action.Result, error) {
-		c := ctx.Previous.(container)
-		hostPort, err := c.hostPort()
-		if err != nil {
-			return nil, err
-		}
 		c.HostPort = hostPort
 		return c, nil
-	},
-	Backward: func(ctx action.BWContext) {
 	},
 }
 

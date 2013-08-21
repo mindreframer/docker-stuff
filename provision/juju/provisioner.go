@@ -365,9 +365,14 @@ func (p *JujuProvisioner) InstallDeps(app provision.App, w io.Writer) error {
 	return app.Run("/var/lib/tsuru/hooks/dependencies", w)
 }
 
+func (p *JujuProvisioner) ExecuteCommandOnce(stdout, stderr io.Writer, app provision.App, cmd string, args ...string) error {
+	return nil
+}
+
 func (p *JujuProvisioner) ExecuteCommand(stdout, stderr io.Writer, app provision.App, cmd string, args ...string) error {
 	arguments := []string{"ssh", "-o", "StrictHostKeyChecking no", "-q"}
 	units := app.ProvisionedUnits()
+	log.Printf("[execute cmd] - provisioned unit %#v", units)
 	length := len(units)
 	for i, unit := range units {
 		if length > 1 {
@@ -385,9 +390,11 @@ func (p *JujuProvisioner) ExecuteCommand(stdout, stderr io.Writer, app provision
 		cmdargs = append(cmdargs, arguments...)
 		cmdargs = append(cmdargs, strconv.Itoa(unit.GetMachine()), cmd)
 		cmdargs = append(cmdargs, args...)
+		log.Printf("[execute cmd] - running cmd %s on machine %s", cmd, strconv.Itoa(unit.GetMachine()))
 		err := runCmd(true, stdout, stderr, cmdargs...)
 		fmt.Fprintln(stdout)
 		if err != nil {
+			log.Printf("error on execute cmd %s on machine %s", cmd, strconv.Itoa(unit.GetMachine()))
 			return err
 		}
 	}

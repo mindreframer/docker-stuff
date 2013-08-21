@@ -24,7 +24,7 @@ Example:
 ::
 
     GET /apps HTTP/1.1
-    Content-Legth: 82
+    Content-Length: 82
     [{"Ip":"10.10.10.10","Name":"app1","Units":[{"Name":"app1/0","State":"started"}]}]
 
 Info about an app
@@ -43,7 +43,7 @@ Example:
 ::
 
     GET /apps/myapp HTTP/1.1
-    Content-Legth: 284
+    Content-Length: 284
     {"Name":"app1","Framework":"php","Repository":"git@git.com:php.git","State":"dead", "Units":[{"Ip":"10.10.10    .10","Name":"app1/0","State":"started"}, {"Ip":"9.9.9.9","Name":"app1/1","State":"started"}, {"Ip":"","Name":"app1/2","Stat    e":"pending"}],"Teams":["tsuruteam","crane"]}
 
 Remove an app
@@ -180,7 +180,7 @@ Example:
 ::
 
     GET /services HTTP/1.1
-    Content-Legth: 67
+    Content-Length: 67
     {"service": "mongodb", "instances": ["my_nosql", "other-instance"]}
 
 Create a new service
@@ -347,7 +347,144 @@ Example:
 1.3 Service instances
 ---------------------
 
-1.x Quotas
+Add a new service instance
+**************************
+
+    * Method: POST
+    * URI: /services/instances
+    * Body: `{"name": "mymysql": "service_name": "mysql"}`
+
+Returns 200 in case of success.
+Returns 404 if the service does not exists.
+
+Example:
+
+.. highlight:: bash
+
+::
+
+    POST /services/instances HTTP/1.1
+    {"name": "mymysql": "service_name": "mysql"}
+
+Remove a service instance
+*************************
+
+    * Method: DELETE
+    * URI: /services/instances/<serviceinstancename>
+
+Returns 200 in case of success.
+Returns 404 if the service does not exists.
+
+Example:
+
+.. highlight:: bash
+
+::
+
+    DELETE /services/instances/mymysql HTTP/1.1
+
+Bind a service instance with an app
+***********************************
+
+    * Method: PUT
+    * URI: /services/instances/<serviceinstancename>/<appname>
+    * Format: json
+
+Returns 200 in case of success, and json with the enviroment variables to be exported
+in the app environ.
+Returns 403 if the user has not access to the app.
+Returns 404 if the application does not exists.
+Returns 404 if the service instance does not exists.
+
+Example:
+
+.. highlight:: bash
+
+::
+
+    PUT /services/instances/mymysql/myapp HTTP/1.1
+    Content-Length: 29
+    {"DATABASE_HOST":"localhost"}
+
+Unbind a service instance with an app
+*************************************
+
+    * Method: DELETE
+    * URI: /services/instances/<serviceinstancename>/<appname>
+
+Returns 200 in case of success.
+Returns 403 if the user has not access to the app.
+Returns 404 if the application does not exists.
+Returns 404 if the service instance does not exists.
+
+Example:
+
+.. highlight:: bash
+
+::
+
+    DELETE /services/instances/mymysql/myapp HTTP/1.1
+
+List all services and your instances
+************************************
+
+    * Method: GET
+    * URI: /services/instances
+    * Format: json
+
+Returns 200 in case of success and a json with the service list.
+
+
+Example:
+
+.. highlight:: bash
+
+::
+
+    GET /services/instances HTTP/1.1
+    Content-Length: 52
+    [{"service": "redis", "instances": ["redis-globo"]}]
+
+Get an info about a service instance
+************************************
+
+    * Method: GET
+    * URI: /services/instances/<serviceinstancename>
+    * Format: json
+
+Returns 200 in case of success and a json with the service instance data.
+Returns 404 if the service instance does not exists.
+
+
+Example:
+
+.. highlight:: bash
+
+::
+
+    GET /services/instances/mymysql HTTP/1.1
+    Content-Length: 71
+    {"name": "mongo-1", "servicename": "mongodb", "teams": [], "apps": []}
+
+service instance status
+***********************
+
+    * Method: GET
+    * URI: /services/instances/<serviceinstancename>/status
+
+Returns 200 in case of success.
+
+
+Example:
+
+.. highlight:: bash
+
+::
+
+    GET /services/instances/mymysql/status HTTP/1.1
+
+
+1.4 Quotas
 ----------
 
 Get quota info of an user
@@ -366,10 +503,10 @@ Example:
 ::
 
     GET /quota/wolverine HTTP/1.1
-    Content-Legth: 29
+    Content-Length: 29
     {"items": 10, "available": 2}
 
-1.x Healers
+1.5 Healers
 -----------
 
 List healers
@@ -388,7 +525,7 @@ Example:
 ::
 
     GET /healers HTTP/1.1
-    Content-Legth: 35
+    Content-Length: 35
     [{"app-heal": "http://healer.com"}]
 
 Execute healer
@@ -407,7 +544,7 @@ Example:
 
     GET /healers/app-heal HTTP/1.1
 
-1.x Platforms
+1.6 Platforms
 -------------
 
 List platforms
@@ -426,10 +563,10 @@ Example:
 ::
 
     GET /platforms HTTP/1.1
-    Content-Legth: 67
+    Content-Length: 67
     [{Name: "python"},{Name: "java"},{Name: "ruby20"},{Name: "static"}]
 
-1.x Users
+1.7 Users
 ---------
 
 Create an user
@@ -583,7 +720,7 @@ Example:
     DELETE /users/keys HTTP/1.1
     Body: `{"key":"my-key"}`
 
-1.x Teams
+1.8 Teams
 ---------
 
 List teams
@@ -602,7 +739,7 @@ Example:
 ::
 
     GET /teams HTTP/1.1
-    Content-Legth: 22
+    Content-Length: 22
     [{"name": "teamname"}]
 
 Info about a team
@@ -687,7 +824,7 @@ Example:
 
     DELETE /teams/myteam/myuser HTTP/1.1
 
-1.x Tokens
+1.9 Tokens
 ----------
 
 Generate app token

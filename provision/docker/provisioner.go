@@ -15,6 +15,7 @@ import (
 	"github.com/globocom/tsuru/exec"
 	"github.com/globocom/tsuru/log"
 	"github.com/globocom/tsuru/provision"
+	"github.com/globocom/tsuru/queue"
 	"github.com/globocom/tsuru/router"
 	_ "github.com/globocom/tsuru/router/hipache"
 	_ "github.com/globocom/tsuru/router/testing"
@@ -22,6 +23,7 @@ import (
 	"io/ioutil"
 	"labix.org/v2/mgo"
 	"net"
+	"strings"
 	"sync"
 	"time"
 )
@@ -80,8 +82,8 @@ func (p *dockerProvisioner) Restart(app provision.App) error {
 		if err != nil {
 			log.Printf("Failed to restart %q: %s.", app.GetName(), err)
 			log.Printf("Command outputs:")
-			log.Printf("out: %s", buf)
-			log.Printf("err: %s", buf)
+			log.Printf("out: %s", &buf)
+			log.Printf("err: %s", &buf)
 			return err
 		}
 		buf.Reset()
@@ -104,10 +106,12 @@ func injectEnvsAndRestart(a provision.App) {
 }
 
 func startInBackground(a provision.App, c container, imageId string, w io.Writer, started chan bool) {
-	_, err := start(a, imageId, w)
+	newContainer, err := start(a, imageId, w)
 	if err != nil {
-		log.Printf("error on start the app %s - %s", a, err)
+		log.Printf("error on start the app %s - %s", a.GetName(), err)
 	}
+	msg := queue.Message{Action: app.BindService, Args: []string{a.GetName(), newContainer.ID}}
+	go app.Enqueue(msg)
 	if c.ID != "" {
 		if a.RemoveUnit(c.ID) != nil {
 			removeContainer(&c)
@@ -178,10 +182,10 @@ func (p *dockerProvisioner) Destroy(app provision.App) error {
 	containers, _ := listAppContainers(app.GetName())
 	for _, c := range containers {
 		go func(c container) {
-			removeImage(c.Image)
 			removeContainer(&c)
 		}(c)
 	}
+	go removeImage(assembleImageName(app.GetName()))
 	r, err := getRouter()
 	if err != nil {
 		log.Printf("Failed to get router: %s", err.Error())
@@ -234,15 +238,36 @@ func (*dockerProvisioner) AddUnits(a provision.App, units uint) ([]provision.Uni
 	return result, nil
 }
 
-func (*dockerProvisioner) RemoveUnit(app provision.App, unitName string) error {
+func (*dockerProvisioner) RemoveUnit(a provision.App, unitName string) error {
 	container, err := getContainer(unitName)
 	if err != nil {
 		return err
 	}
-	if container.AppName != app.GetName() {
+	if container.AppName != a.GetName() {
 		return errors.New("Unit does not belong to this app")
 	}
-	return removeContainer(container)
+	if err := removeContainer(container); err != nil {
+		return err
+	}
+	return rebindWhenNeed(a.GetName(), container)
+}
+
+// rebindWhenNeed rebinds a unit to the app's services when it finds
+// that the unit being removed has the same host that any
+// of the units that still being used
+func rebindWhenNeed(appName string, container *container) error {
+	containers, err := listAppContainers(appName)
+	if err != nil {
+		return err
+	}
+	for _, c := range containers {
+		if c.HostAddr == container.HostAddr && c.ID != container.ID {
+			msg := queue.Message{Action: app.BindService, Args: []string{appName, c.ID}}
+			go app.Enqueue(msg)
+			break
+		}
+	}
+	return nil
 }
 
 func removeContainer(c *container) error {
@@ -258,6 +283,10 @@ func removeContainer(c *container) error {
 }
 
 func (*dockerProvisioner) InstallDeps(app provision.App, w io.Writer) error {
+	return nil
+}
+
+func (*dockerProvisioner) ExecuteCommandOnce(stdout, stderr io.Writer, app provision.App, cmd string, args ...string) error {
 	return nil
 }
 
@@ -316,20 +345,16 @@ func collectUnit(container container, units chan<- provision.Unit, wg *sync.Wait
 	case "created":
 		return
 	}
-	dockerContainer, err := dockerCluster().InspectContainer(container.ID)
-	if err != nil {
-		log.Printf("error on inspecting [container %s] for collect data", container.ID)
-		return
-	}
-	unit.Ip = dockerContainer.NetworkSettings.IPAddress
-	if hostPort, err := container.hostPort(); err == nil && hostPort != container.HostPort {
-		err = fixContainer(&container, unit.Ip, hostPort)
+	unit.Ip = container.HostAddr
+	if ip, hostPort, err := container.networkInfo(); err == nil &&
+		(hostPort != container.HostPort || ip != container.IP) {
+		err = fixContainer(&container, ip, hostPort)
 		if err != nil {
 			log.Printf("error on fix container hostport for [container %s]", container.ID)
 			return
 		}
 	}
-	addr := fmt.Sprintf("%s:%s", unit.Ip, container.Port)
+	addr := strings.Replace(container.getAddress(), "http://", "", 1)
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		unit.Status = provision.StatusInstalling
@@ -360,7 +385,7 @@ func fixContainer(container *container, ip, port string) error {
 		return err
 	}
 	router.RemoveRoute(container.AppName, container.getAddress())
-	runCmd("ssh-keygen", "-R", container.IP)
+	container.removeHost()
 	container.IP = ip
 	container.HostPort = port
 	router.AddRoute(container.AppName, container.getAddress())
@@ -390,6 +415,7 @@ func (p *dockerProvisioner) Commands() []cmd.Command {
 		addNodeToSchedulerCmd{},
 		removeNodeFromSchedulerCmd{},
 		listNodesInTheSchedulerCmd{},
+		&sshAgentCmd{},
 	}
 }
 
