@@ -34,11 +34,13 @@ case "$1" in
 
   release)
     APP="$2"; IMAGE="$3"
+    pluginhook pre-release $APP $IMAGE
     if [[ -f "$HOME/$APP/ENV" ]]; then
       id=$(cat "$HOME/$APP/ENV" | docker run -i -a stdin $IMAGE /bin/bash -c "mkdir -p /app/.profile.d && cat > /app/.profile.d/app-env.sh")
       test $(docker wait $id) -eq 0
       docker commit $id $IMAGE > /dev/null
     fi
+    pluginhook post-release $APP $IMAGE
     ;;
 
   deploy)
@@ -64,9 +66,9 @@ case "$1" in
 
   cleanup)
     # delete all non-running container
-    docker ps -a | grep 'Exit' |  awk '{print $1}' | xargs docker rm 2> /dev/null &
+    docker ps -a | grep 'Exit' |  awk '{print $1}' | xargs docker rm &> /dev/null &
     # delete unused images
-    docker images | grep '<none>' |  awk '{print $3}'  | xargs docker rmi 2> /dev/null &
+    docker images | grep '<none>' |  awk '{print $3}'  | xargs docker rmi &> /dev/null &
     ;;
 
   plugins)
@@ -75,6 +77,15 @@ case "$1" in
 
   plugins-install)
     pluginhook install
+    ;;
+
+  # temporary hack for https://github.com/progrium/dokku/issues/82
+  deploy:all)
+    for app in $(ls -d $HOME/*/); do
+      APP=$(basename $app);
+      IMAGE="app/$APP"
+      dokku deploy $APP $IMAGE
+    done
     ;;
 
   help)

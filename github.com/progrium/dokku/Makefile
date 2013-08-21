@@ -1,9 +1,7 @@
 GITRECEIVE_URL ?= https://raw.github.com/progrium/gitreceive/master/gitreceive
 SSHCOMMAND_URL ?= https://raw.github.com/progrium/sshcommand/master/sshcommand
 PLUGINHOOK_URL ?= https://s3.amazonaws.com/progrium-pluginhook/pluginhook_0.1.0_amd64.deb
-DOCKER_URL ?= https://launchpad.net/~dotcloud/+archive/lxc-docker/+files/lxc-docker_0.4.8-1_amd64.deb
-DOCKER_BIN ?= https://s3.amazonaws.com/get.docker.io/builds/Linux/x86_64/docker-1004d57b85fc3714b089da4c457228690f254504
-STACK_URL ?= https://s3.amazonaws.com/progrium-dokku/progrium_buildstep.tgz
+STACK_URL ?= github.com/progrium/buildstep
 
 all: dependencies stack install plugins
 
@@ -33,20 +31,19 @@ pluginhook:
 	dpkg -i /tmp/pluginhook_0.1.0_amd64.deb
 
 docker: aufs
-	wget -qO /tmp/lxc-docker_0.4.8-1_amd64.deb ${DOCKER_URL}
-	dpkg --force-depends -i /tmp/lxc-docker_0.4.8-1_amd64.deb && apt-get install -f -y
-	# newer docker 0.4.8 binary
-	stop docker
-	wget -qO /usr/bin/docker ${DOCKER_BIN}
-	chmod +x /usr/bin/docker
-	start docker
+	egrep -i "^docker" /etc/group || groupadd docker
+	usermod -aG docker git
+	usermod -aG docker dokku
+	apt-add-repository -y ppa:dotcloud/lxc-docker
+	apt-get update
+	apt-get install -y lxc-docker 
 	sleep 2 # give docker a moment i guess
 
 aufs:
 	lsmod | grep aufs || modprobe aufs || apt-get install -y linux-image-extra-`uname -r`
 
 stack:
-	@docker images | grep progrium/buildstep || curl ${STACK_URL} | gunzip -cd | docker import - progrium/buildstep
+	@docker images | grep progrium/buildstep || docker build -t progrium/buildstep ${STACK_URL}
 
 count:
 	@echo "Core lines:"
