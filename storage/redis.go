@@ -12,23 +12,34 @@ import (
 	"github.com/globocom/docker-cluster/cluster"
 )
 
-var ErrNoSuchContainer = errors.New("No such container")
+var (
+	ErrNoSuchContainer = errors.New("No such container")
+	ErrNoSuchImage     = errors.New("No such image")
+)
 
 type redisStorage struct {
-	pool *redis.Pool
+	pool   *redis.Pool
+	prefix string
 }
 
-func (s *redisStorage) Store(container, host string) error {
+func (s *redisStorage) key(value string) string {
+	if s.prefix == "" {
+		return value
+	}
+	return s.prefix + ":" + value
+}
+
+func (s *redisStorage) StoreContainer(container, host string) error {
 	conn := s.pool.Get()
 	defer conn.Close()
-	_, err := conn.Do("SET", container, host)
+	_, err := conn.Do("SET", s.key(container), host)
 	return err
 }
 
-func (s *redisStorage) Retrieve(container string) (string, error) {
+func (s *redisStorage) RetrieveContainer(container string) (string, error) {
 	conn := s.pool.Get()
 	defer conn.Close()
-	result, err := conn.Do("GET", container)
+	result, err := conn.Do("GET", s.key(container))
 	if err != nil {
 		return "", err
 	}
@@ -38,10 +49,10 @@ func (s *redisStorage) Retrieve(container string) (string, error) {
 	return string(result.([]byte)), nil
 }
 
-func (s *redisStorage) Remove(container string) error {
+func (s *redisStorage) RemoveContainer(container string) error {
 	conn := s.pool.Get()
 	defer conn.Close()
-	result, err := conn.Do("DEL", container)
+	result, err := conn.Do("DEL", s.key(container))
 	if err != nil {
 		return err
 	}
@@ -51,21 +62,54 @@ func (s *redisStorage) Remove(container string) error {
 	return nil
 }
 
+func (s *redisStorage) StoreImage(image, host string) error {
+	conn := s.pool.Get()
+	defer conn.Close()
+	_, err := conn.Do("SET", s.key("image:"+image), host)
+	return err
+}
+
+func (s *redisStorage) RetrieveImage(id string) (string, error) {
+	conn := s.pool.Get()
+	defer conn.Close()
+	result, err := conn.Do("GET", s.key("image:"+id))
+	if err != nil {
+		return "", err
+	}
+	if result == nil {
+		return "", ErrNoSuchImage
+	}
+	return string(result.([]byte)), nil
+}
+
+func (s *redisStorage) RemoveImage(id string) error {
+	conn := s.pool.Get()
+	defer conn.Close()
+	result, err := conn.Do("DEL", s.key("image:"+id))
+	if err != nil {
+		return err
+	}
+	if result.(int64) < 1 {
+		return ErrNoSuchImage
+	}
+	return nil
+}
+
 // Redis returns a storage instance that uses Redis to store nodes and
 // containers relation.
 //
 // The addres must be in the format <host>:<port>. For servers that require
 // authentication, use AuthenticatedRedis.
-func Redis(addr string) cluster.Storage {
-	return rStorage(addr, "")
+func Redis(addr, prefix string) cluster.Storage {
+	return rStorage(addr, "", prefix)
 }
 
 // AuthenticatedRedis works like Redis, but supports password authentication.
-func AuthenticatedRedis(addr, password string) cluster.Storage {
-	return rStorage(addr, password)
+func AuthenticatedRedis(addr, password, prefix string) cluster.Storage {
+	return rStorage(addr, password, prefix)
 }
 
-func rStorage(addr, password string) cluster.Storage {
+func rStorage(addr, password, prefix string) cluster.Storage {
 	pool := redis.NewPool(func() (redis.Conn, error) {
 		conn, err := redis.Dial("tcp", addr)
 		if err != nil {
@@ -79,5 +123,5 @@ func rStorage(addr, password string) cluster.Storage {
 		}
 		return conn, nil
 	}, 10)
-	return &redisStorage{pool: pool}
+	return &redisStorage{pool: pool, prefix: prefix}
 }
