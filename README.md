@@ -2,7 +2,7 @@ docker-api
 ==========
 [![Gem Version](https://badge.fury.io/rb/docker-api.png)](http://badge.fury.io/rb/docker-api) [![travis-ci](https://travis-ci.org/swipely/docker-api.png?branch=master)](https://travis-ci.org/swipely/docker-api) [![Code Climate](https://codeclimate.com/github/swipely/docker-api.png)](https://codeclimate.com/github/swipely/docker-api) [![Dependency Status](https://gemnasium.com/swipely/docker-api.png)](https://gemnasium.com/swipely/docker-api)
 
-This gem provides an object-oriented interface to the [Docker Remote API](http://docs.docker.io/en/latest/api/docker_remote_api_v1.2/). Every method listed there is implemented, with the exception of attaching to the STDIN of a Container. At the time of this writing, docker-api is meant to interface with Docker version 0.4.6.
+This gem provides an object-oriented interface to the [Docker Remote API](http://docs.docker.io/en/latest/api/docker_remote_api_v1.4/). Every method listed there is implemented, with the exception of attaching to the STDIN of a Container. At the time of this writing, docker-api is meant to interface with Docker version 0.5.*.
 
 Installation
 ------------
@@ -74,7 +74,7 @@ require 'docker'
 # => true
 
 Docker.version
-# => { 'Version' => '0.4.0', 'GoVersion' => 'go1.0.3' }
+# => { 'Version' => '0.5.2', 'GoVersion' => 'go1.1' }
 
 Docker.info
 # => { "Debug" => false, "Containers" => 187, "Images" => 196, "NFd" => 10, "NGoroutines" => 9, "MemoryLimit" => true }
@@ -160,19 +160,23 @@ container.json
 
 # Start running the Container.
 container.start
-# => nil
+# => Docker::Container { :id => 492510dd38e4, :connection => Docker::Connection { :url => http://localhost, :options => {:port=>4243} } }
 
 # Stop running the Container.
 container.stop
-# => nil
+# => Docker::Container { :id => 492510dd38e4, :connection => Docker::Connection { :url => http://localhost, :options => {:port=>4243} } }
 
 # Restart the Container.
 container.restart
-# => nil
+# => Docker::Container { :id => 492510dd38e4, :connection => Docker::Connection { :url => http://localhost, :options => {:port=>4243} } }
 
 # Kill the command running in the Container.
 container.kill
-# => nil
+# => Docker::Container { :id => 492510dd38e4, :connection => Docker::Connection { :url => http://localhost, :options => {:port=>4243} } }
+
+# Return the currently executing processes in a Container.
+container.top
+# => [{"PID"=>"4851", "TTY"=>"pts/0", "TIME"=>"00:00:00", "CMD"=>"lxc-start"}]
 
 # Export a Container. Since an export is typically at least 300M, chunks of the
 # export are yielded instead of just returning the whole thing.
