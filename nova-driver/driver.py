@@ -1,4 +1,19 @@
 # vim: tabstop=4 shiftwidth=4 softtabstop=4
+#
+# Copyright (c) 2013 dotCloud, Inc.
+# All Rights Reserved.
+#
+#    Licensed under the Apache License, Version 2.0 (the "License"); you may
+#    not use this file except in compliance with the License. You may obtain
+#    a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+#    License for the specific language governing permissions and limitations
+#    under the License.
 
 """
 A Docker Hypervisor which allows running Linux Containers instead of VMs.
@@ -14,16 +29,17 @@ from oslo.config import cfg
 
 from nova.compute import power_state
 from nova import exception
-from nova.openstack.common import log as logging
+from nova.openstack.common import log
 from nova import utils
 from nova.virt.docker import client
 from nova.virt.docker import hostinfo
 from nova.virt import driver
 
+
 CONF = cfg.CONF
 CONF.import_opt('host', 'nova.netconf')
 
-LOG = logging.getLogger(__name__)
+LOG = log.getLogger(__name__)
 
 
 class DockerDriver(driver.ComputeDriver):
@@ -36,7 +52,7 @@ class DockerDriver(driver.ComputeDriver):
 
     def __init__(self, virtapi, read_only=False):
         super(DockerDriver, self).__init__(virtapi)
-        self.docker = client.HTTPClient()
+        self.docker = client.DockerHTTPClient()
         self.virtapi = virtapi
         self.fake = False
 
@@ -47,7 +63,8 @@ class DockerDriver(driver.ComputeDriver):
 
     def init_host(self, host):
         if self.docker.is_daemon_running() is False:
-            raise exception.NovaException("Docker daemon is not running")
+            raise exception.NovaException("Docker daemon is not running or is "
+                    "not reachable (check the rights on /var/run/docker.sock)")
 
     def list_instances(self, _inspect=False):
         res = []
@@ -95,21 +112,10 @@ class DockerDriver(driver.ComputeDriver):
         hostname = socket.gethostname()
         memory = hostinfo.get_memory_usage()
         disk = hostinfo.get_disk_usage()
-        stats = {
-            'hypervisor_hostname': hostname,
-            'host_hostname': hostname,
-            'host_name_label': hostname,
-            'host_name-description': hostname,
-            'host_memory_total': memory['total'],
-            'host_memory_overhead': memory['used'],
-            'host_memory_free': memory['free'],
-            'host_memory_free_computed': memory['free'],
-            'host_other_config': {},
-            'host_cpu_info': {},
-            'disk_available': disk['available'],
-            'disk_total': disk['total'],
-            'disk_used': disk['used']
-        }
+        stats = self.get_available_resource(hostname)
+        stats['hypervisor_hostname'] = hostname
+        stats['host_hostname'] = hostname
+        stats['host_name_label'] = hostname
         return stats
 
     def get_available_resource(self, nodename):
@@ -117,11 +123,12 @@ class DockerDriver(driver.ComputeDriver):
         disk = hostinfo.get_disk_usage()
         stats = {
             'vcpus': 1,
-            'memory_mb': memory['total'] / 1024 / 1024,
-            'local_gb': disk['total'] / 1024 / 1024 / 1024,
             'vcpus_used': 0,
-            'memory_mb_used': memory['used'] / 1024 / 1024,
-            'local_gb_used': disk['used'] / 1024 / 1024 / 1024,
+            'memory_mb': memory['total'] / (1024 ** 2),
+            'memory_mb_used': memory['used'] / (1024 ** 2),
+            'local_gb': disk['total'] / (1024 ** 3),
+            'local_gb_used': disk['used'] / (1024 ** 3),
+            'disk_available_least': disk['available'] / (1024 ** 3),
             'hypervisor_type': 'docker',
             'hypervisor_version': '1.0',
             'hypervisor_hostname': nodename,
@@ -138,15 +145,19 @@ class DockerDriver(driver.ComputeDriver):
         cgroup_path = self._find_cgroup_devices_path()
         lxc_path = os.path.join(cgroup_path, 'lxc')
         tasks_path = os.path.join(lxc_path, container_id, 'tasks')
-        # FIXME: this is to avoid a race conditions when there is no tasks yet
-        # in the cgroup. However it would be much more reliable to watch the
-        # the file regularly with a timeout
-        time.sleep(1)
-        with open(tasks_path) as f:
-            pids = f.readlines()
-            if not pids:
+        n = 0
+        while True:
+            if n > 20:
                 return
-            return int(pids[0].strip())
+            try:
+                with open(tasks_path) as f:
+                    pids = f.readlines()
+                    if pids:
+                        return int(pids[0].strip())
+            except IOError:
+                pass
+            time.sleep(0.5)
+            n += 1
 
     def _setup_network(self, instance, network_info):
         if self.fake is True or not network_info:
@@ -192,17 +203,42 @@ class DockerDriver(driver.ComputeDriver):
             if_remote_name, ip,
             run_as_root=True)
 
+    def _parse_user_data(self, user_data):
+        data = {}
+        user_data = base64.b64decode(user_data)
+        for ln in user_data.split('\n'):
+            ln = ln.strip()
+            if not ln or ':' not in ln:
+                continue
+            if ln.startswith('#'):
+                continue
+            ln = ln.split(':', 1)
+            data[ln[0].strip()] = ln[1].strip('"\' ')
+        return data
+
+    def _get_memory_limit_bytes(self, instance):
+        for metadata in instance.get('system_metadata', []):
+            if not metadata['deleted'] and \
+                    metadata['key'] == 'instance_type_memory_mb':
+                        return int(metadata['value']) * 1024 * 1024
+        return 0
+
     def spawn(self, context, instance, image_meta, injected_files,
               admin_password, network_info=None, block_device_info=None):
         cmd = ['/bin/sh']
         user_data = instance.get('user_data')
+        image_name = 'ubuntu'
         if user_data:
-            cmd = ['/bin/sh', '-c', base64.b64decode(user_data)]
-        image_name = image_meta.get('name', 'ubuntu')
+            user_data = self._parse_user_data(user_data)
+            if 'cmd' in user_data:
+                cmd = ['/bin/sh', '-c', user_data.get('cmd')]
+            if 'image' in user_data:
+                image_name = user_data.get('image')
         args = {
             'Hostname': instance['name'],
             'Image': image_name,
-            'Cmd': cmd
+            'Cmd': cmd,
+            'Memory': self._get_memory_limit_bytes(instance)
         }
         container_id = self.docker.create_container(args)
         if container_id is None:
@@ -242,7 +278,7 @@ class DockerDriver(driver.ComputeDriver):
         self.docker.stop_container(container_id)
         self.docker.start_container(container_id)
 
-    def power_on(self, instance):
+    def power_on(self, context, instance, network_info, block_device_info):
         container_id = self.find_container_by_name(instance['name']).get('id')
         if not container_id:
             return
