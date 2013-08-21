@@ -1,7 +1,7 @@
 Maestro
 ============
 
-A command line tool for Container orchestration and management in multi-container docker environments. Container sets are defined in a simple YAML format that mirrors the options available in the Docker API. The intention is to be able to easily launch, orchestrate and destroy complex multi-node envionments for testing and development.
+Maestro provides the ability to easily launch, orchestrate and manage mulitple Docker containers as single unit. Container sets are defined in a simple YAML format that allows you to define how the containers should be created and to specify relationships between containers. The intention is to make easy to create and use complex multi-node container envionments for testing and development.
 
 This is what it currently looks like to use maestro and deploy a multi-tier node.js/mongodb application. All that's required is a maestro.yml in the root of the repository.
 
@@ -9,22 +9,34 @@ This is what it currently looks like to use maestro and deploy a multi-tier node
 $ git clone https://github.com/kstaken/express-todo-example.git
 $ cd express-todo-example && maestro build
 Building template mongodb
-Launching instance of template mongodb named mongodb
-Starting container mongodb - 8e766a36e5be
-Starting nodejs: waiting for service mongodb on ip 172.16.1.83 and port 27017
-Found service mongodb on ip 172.16.1.83 and port 27017
 Building template nodejs
+Launching instance of template mongodb named mongodb
+Starting container mongodb - 144af5ca089d
+Starting nodejs: waiting for service mongodb on ip 172.16.0.61 and port 27017
+Found service mongodb on ip 172.16.0.61 and port 27017
 Launching instance of template nodejs named nodejs
-Starting container nodejs - 40053c060f27
+Starting container nodejs - 52be61a3242c
 Launched.
 
 $ maestro ps
 ID            NODE               COMMAND                                     STATUS     PORTS
-8e766a36e5be  mongodb            /usr/bin/mongod --config /etc/mongodb.conf  Running
-40053c060f27  nodejs             /usr/bin/node /var/www/app.js               Running    49289->80
+144af5ca089d  mongodb            /usr/bin/mongod --config /etc/mongodb.conf  Running
+52be61a3242c  nodejs             /usr/bin/node /var/www/app.js               Running    49184->80
+
+$ maestro stop
+Stopping container mongodb - 144af5ca089d
+Stopping container nodejs - 52be61a3242c
+Stopped.
+
+$ maestro start
+Starting container mongodb - 144af5ca089d
+Starting nodejs: waiting for service mongodb on ip 172.16.0.63 and port 27017
+Found service mongodb on ip 172.16.0.63 and port 27017
+Starting container nodejs - 52be61a3242c
+Started.
 ```
 
-And the app would be accessible on http://localhost:49289/.
+In this example the app would be accessible on http://localhost:49184/.
 
 Status
 ======
@@ -37,10 +49,12 @@ Features
 ========
 
 - Build/start/stop/destroy multi-container docker environments via simple commands
-- Declarative YAML format to specify container configurations for the environment
-- Easily launch multiple instances of the same container for testing cluster operations
 - Specify dependencies between containers so they start in order and wait for services to become available
 - Automatically configure dependent containers to know where to locate services from other containers in the same environment
+- Easily launch and manage multiple copies of the same environment
+- Declarative YAML format to specify container configurations for the environment
+- Easily launch multiple instances of the same container for testing cluster operations
+- Share data between the host machine and containers running in the environment
 - ... Much more to come
 
 Dependencies
@@ -54,6 +68,8 @@ Installation
 ============
 
 Install Docker as described here: http://www.docker.io/gettingstarted/
+
+Note: Docker 0.5.2 changed from listening on a network socket to listening on a unix socket due to a security issue. At this time, to use Maestro with Docker 0.5.2 you must re-enable the TCP socket in Docker. `/usr/bin/docker -d -H=tcp://127.0.0.1:4243` This is safe if you're running Docker inside a VM dedicated to that purpose but not if you're running Docker directly on your physical computer. This will be fixed in the future.
 
 Then:
 ```
@@ -105,7 +121,10 @@ Templates also define a basic docker configuration so that you can pre-define th
 
 `base_image` and `command` are the only required options if no `buildspec` is provided. If `buildspec` is provided `base_image` can be omitted
 
-You can use `require` to specify dependencies between services. The start order will be adjusted and any container that requires a port on a another container will wait for that port to become available before starting.
+`require` is used to specify dependencies between services. The start order will be adjusted and any container that requires a port on a another container will wait for that port to become available before starting.
+
+`mount` allows you to define bind mounts between a directory on the host and a directory in a container. This allows you to share files between the host and the container. 
+    Note: if you define a bind mount on a template then every instance of that template will mount the same host directory.
 
 This example yaml file shows how some of the docker parameters look:
 
@@ -113,6 +132,8 @@ This example yaml file shows how some of the docker parameters look:
   templates:
     test_server_1:
       base_image: ubuntu
+      mount:
+        /host/path: /container/path
       config:
         ports: 
           - '8080' 
@@ -134,14 +155,14 @@ This example yaml file shows how some of the docker parameters look:
 
 **Note:** *Command is required by the Docker Python api and having to specify it here can cause problems with images that pre-define entrypoints and commands.*
 
-**Note:** *the syntax for volumes is not fully specified and bind mounts are not currently supported.*
-
 Command Line Tools
 ===
 
 The command line tool is called `maestro` and initial enironments are defined in `maestro.yml`. If there is a `maestro.yml` in the current directory it will be automatically used otherwise the `-f` option can be used to specify the location of the file.
 
 The environment state will be saved to a file named `environment.yml` and commands that manipulate existing environments will look for an `environment.yml` in the current directory or it can be specified by the `-e` option.
+
+If you want to create a named environment you can use `-n` to set the name and it will be made a global environment that lives either under ~/.maestro or /var/lib/maestro depending on your setup.
 
 `maestro build`
 
@@ -177,8 +198,7 @@ Roadmap
 - ~~Add automatic pulling of base images~~
 - Make it easier to run the full test suite
 - Add the ability to depend on external services
-- Add the ability to have named global environments as well as environments stored in the local directory
+- ~~Add the ability to have named global environments as well as environments stored in the local directory~~
 - More robust support for running and adding containers to an existing environment
 - Direct build and instantiation of an environment from a git repo
-- Ability to span environments across multiple docker servers
 - ...
