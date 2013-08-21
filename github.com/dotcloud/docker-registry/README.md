@@ -4,27 +4,57 @@ Docker-Registry
 Create the configuration
 ------------------------
 
+The Docker Registry comes with a sample configuration file,
+`config_sample.yml`. Copy this to `config.yml` to provide a basic
+configuration:
+ 
 ```
 cp config_sample.yml config.yml
 ```
 
-Edit the configuration with your information.
+Inside the `config.yml` file we can see a selection of configuration
+headings called `flavors`: `common`, `dev`, `prod`, etc.
 
-Each key in the configuration (except "common") is flavor. You can specify the flavor by setting the environment
-variable "SETTINGS_FLAVOR". If there is no variable set, the default one is "dev".
+You can specify what flavor to run with the `SETTINGS_FLAVOR`
+environment variable.
+
+```
+$ export SETTINGS_FLAVOR=prod
+```
+
+The `common` flavor overrides and is inherited by all other flavors. If
+you don't specify a flavor when running the Docker Registry the `dev`
+flavor will be used.
 
 Run the Registry
 ----------------
 
-Install the system requirements for building a Python library:
+### The fast way:
 
-On Ubuntu install:
+```
+docker run samalba/docker-registry
+```
+
+NOTE: The container will try to allocate the port 5000 by default, if the port
+is already taken, find out which one has been taken by running "docker ps"
+
+### The old way:
+
+#### On Ubuntu
+
+Install the system requirements for building a Python library:
 
 ```
 sudo apt-get install build-essential python-dev libevent-dev python-pip
 ```
 
-On Red Hat-based systems:
+Then install the Registry app:
+
+```
+sudo pip install -r requirements.txt
+```
+
+#### On Red Hat-based systems:
 
 ```
 sudo yum install python-devel libevent-devel python-pip
@@ -36,33 +66,35 @@ should not require the additional repositories.
 
 Then install the Registry app:
 
-On Ubuntu:
-
-```
-sudo pip install -r requirements.txt
-```
-
-On Red Hat-based systems you will need to use the `python-pip`
-command:
-
 ```
 sudo python-pip install -r requirements.txt
 ```
 
-And then to run it (for a dev environment):
+#### Run it
 
 ```
 gunicorn --access-logfile - --debug -k gevent -b 0.0.0.0:5000 -w 1 wsgi:application
 ```
 
+### How do I setup user accounts?
+
+The first time someone tries to push to your registry, it will prompt
+them for a username, password, and email.
+
+### What about a Production environment?
+
 The recommended setting to run the Registry in a prod environment is gunicorn behind a nginx server which supports
 chunked transfer-encoding (nginx >= 1.3.9).
 
-You could use for instance supervisord to spawn the Registry using this command:
+You could use for instance supervisord to spawn the registry with 8 workers using this command:
 
 ```
 gunicorn -k gevent --max-requests 100 --graceful-timeout 3600 -t 3600 -b localhost:5000 -w 8 wsgi:application
 ```
+
+Note that when using multiple workers, the secret_key for the Flask session must be set explicitly
+in config.yml. Otherwise each worker will use its own random secret key, leading to unpredictable
+behavior.
 
 The nginx configuration will look like:
 
@@ -75,6 +107,14 @@ location / {
 
 And you might want to add [Basic auth on Nginx](http://wiki.nginx.org/HttpAuthBasicModule) to protect it
 (if you're not using it on your local network):
+
+NOTE: The central Registry runs on the dotCloud platform:
+
+```
+cd dotcloud-registry/
+dotcloud create myregistry
+dotcloud push
+```
 
 Run tests
 ---------
