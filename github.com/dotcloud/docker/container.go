@@ -2,6 +2,7 @@ package docker
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/dotcloud/docker/term"
@@ -76,8 +77,10 @@ type Config struct {
 	Image           string // Name of the image as it was passed by the operator (eg. could be symbolic)
 	Volumes         map[string]struct{}
 	VolumesFrom     string
+	WorkingDir      string
 	Entrypoint      []string
 	NetworkDisabled bool
+	Privileged      bool
 }
 
 type HostConfig struct {
@@ -91,6 +94,10 @@ type BindMap struct {
 	Mode    string
 }
 
+var (
+	ErrInvaidWorikingDirectory = errors.New("The working directory is invalid. It needs to be an absolute path.")
+)
+
 func ParseRun(args []string, capabilities *Capabilities) (*Config, *HostConfig, *flag.FlagSet, error) {
 	cmd := Subcmd("run", "[OPTIONS] IMAGE [COMMAND] [ARG...]", "Run a command in a new container")
 	if len(args) > 0 && args[0] != "--help" {
@@ -99,6 +106,7 @@ func ParseRun(args []string, capabilities *Capabilities) (*Config, *HostConfig, 
 	}
 
 	flHostname := cmd.String("h", "", "Container host name")
+	flWorkingDir := cmd.String("w", "", "Working directory inside the container")
 	flUser := cmd.String("u", "", "Username or UID")
 	flDetach := cmd.Bool("d", false, "Detached mode: Run container in the background, print new container id")
 	flAttach := NewAttachOpts()
@@ -108,6 +116,7 @@ func ParseRun(args []string, capabilities *Capabilities) (*Config, *HostConfig, 
 	flMemory := cmd.Int64("m", 0, "Memory limit (in bytes)")
 	flContainerIDFile := cmd.String("cidfile", "", "Write the container ID to the file")
 	flNetwork := cmd.Bool("n", true, "Enable networking for this container")
+	flPrivileged := cmd.Bool("privileged", false, "Give extended privileges to this container")
 
 	if capabilities != nil && *flMemory > 0 && !capabilities.MemoryLimit {
 		//fmt.Fprintf(stdout, "WARNING: Your kernel does not support memory limit capabilities. Limitation discarded.\n")
@@ -136,6 +145,9 @@ func ParseRun(args []string, capabilities *Capabilities) (*Config, *HostConfig, 
 	}
 	if *flDetach && len(flAttach) > 0 {
 		return nil, nil, cmd, fmt.Errorf("Conflicting options: -a and -d")
+	}
+	if *flWorkingDir != "" && !path.IsAbs(*flWorkingDir) {
+		return nil, nil, cmd, ErrInvaidWorikingDirectory
 	}
 	// If neither -d or -a are set, attach to everything by default
 	if len(flAttach) == 0 && !*flDetach {
@@ -194,6 +206,8 @@ func ParseRun(args []string, capabilities *Capabilities) (*Config, *HostConfig, 
 		Volumes:         flVolumes,
 		VolumesFrom:     *flVolumesFrom,
 		Entrypoint:      entrypoint,
+		Privileged:      *flPrivileged,
+		WorkingDir:      *flWorkingDir,
 	}
 	hostConfig := &HostConfig{
 		Binds:           binds,
@@ -266,7 +280,8 @@ func (container *Container) FromDisk() error {
 		return err
 	}
 	// Load container settings
-	if err := json.Unmarshal(data, container); err != nil {
+	// udp broke compat of docker.PortMapping, but it's not used when loading a container, we can skip it
+	if err := json.Unmarshal(data, container); err != nil && !strings.Contains(err.Error(), "docker.PortMapping") {
 		return err
 	}
 	return nil
@@ -533,6 +548,10 @@ func (container *Container) Start(hostConfig *HostConfig) error {
 		container.Config.MemorySwap = -1
 	}
 
+	if container.runtime.capabilities.IPv4ForwardingDisabled {
+		log.Printf("WARNING: IPv4 forwarding is disabled. Networking will not work")
+	}
+
 	// Create the requested bind mounts
 	binds := make(map[string]BindMap)
 	// Define illegal container destinations
@@ -569,40 +588,12 @@ func (container *Container) Start(hostConfig *HostConfig) error {
 		binds[path.Clean(dst)] = bindMap
 	}
 
-	// FIXME: evaluate volumes-from before individual volumes, so that the latter can override the former.
-	// Create the requested volumes volumes
 	if container.Volumes == nil || len(container.Volumes) == 0 {
 		container.Volumes = make(map[string]string)
 		container.VolumesRW = make(map[string]bool)
-
-		for volPath := range container.Config.Volumes {
-			volPath = path.Clean(volPath)
-			// If an external bind is defined for this volume, use that as a source
-			if bindMap, exists := binds[volPath]; exists {
-				container.Volumes[volPath] = bindMap.SrcPath
-				if strings.ToLower(bindMap.Mode) == "rw" {
-					container.VolumesRW[volPath] = true
-				}
-				// Otherwise create an directory in $ROOT/volumes/ and use that
-			} else {
-				c, err := container.runtime.volumes.Create(nil, container, "", "", nil)
-				if err != nil {
-					return err
-				}
-				srcPath, err := c.layer()
-				if err != nil {
-					return err
-				}
-				container.Volumes[volPath] = srcPath
-				container.VolumesRW[volPath] = true // RW by default
-			}
-			// Create the mountpoint
-			if err := os.MkdirAll(path.Join(container.RootfsPath(), volPath), 0755); err != nil {
-				return nil
-			}
-		}
 	}
 
+	// Apply volumes from another container if requested
 	if container.Config.VolumesFrom != "" {
 		c := container.runtime.Get(container.Config.VolumesFrom)
 		if c == nil {
@@ -610,7 +601,7 @@ func (container *Container) Start(hostConfig *HostConfig) error {
 		}
 		for volPath, id := range c.Volumes {
 			if _, exists := container.Volumes[volPath]; exists {
-				return fmt.Errorf("The requested volume %s overlap one of the volume of the container %s", volPath, c.ID)
+				continue
 			}
 			if err := os.MkdirAll(path.Join(container.RootfsPath(), volPath), 0755); err != nil {
 				return nil
@@ -622,6 +613,38 @@ func (container *Container) Start(hostConfig *HostConfig) error {
 		}
 	}
 
+	// Create the requested volumes if they don't exist
+	for volPath := range container.Config.Volumes {
+		volPath = path.Clean(volPath)
+		// Skip existing volumes
+		if _, exists := container.Volumes[volPath]; exists {
+			continue
+		}
+		// If an external bind is defined for this volume, use that as a source
+		if bindMap, exists := binds[volPath]; exists {
+			container.Volumes[volPath] = bindMap.SrcPath
+			if strings.ToLower(bindMap.Mode) == "rw" {
+				container.VolumesRW[volPath] = true
+			}
+			// Otherwise create an directory in $ROOT/volumes/ and use that
+		} else {
+			c, err := container.runtime.volumes.Create(nil, container, "", "", nil)
+			if err != nil {
+				return err
+			}
+			srcPath, err := c.layer()
+			if err != nil {
+				return err
+			}
+			container.Volumes[volPath] = srcPath
+			container.VolumesRW[volPath] = true // RW by default
+		}
+		// Create the mountpoint
+		if err := os.MkdirAll(path.Join(container.RootfsPath(), volPath), 0755); err != nil {
+			return nil
+		}
+	}
+
 	if err := container.generateLXCConfig(); err != nil {
 		return err
 	}
@@ -630,7 +653,7 @@ func (container *Container) Start(hostConfig *HostConfig) error {
 		"-n", container.ID,
 		"-f", container.lxcConfigPath(),
 		"--",
-		"/sbin/init",
+		"/.dockerinit",
 	}
 
 	// Networking
@@ -652,7 +675,20 @@ func (container *Container) Start(hostConfig *HostConfig) error {
 		"-e", "HOME=/",
 		"-e", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
 		"-e", "container=lxc",
+		"-e", "HOSTNAME="+container.Config.Hostname,
 	)
+	if container.Config.WorkingDir != "" {
+		workingDir := path.Clean(container.Config.WorkingDir)
+		utils.Debugf("[working dir] working dir is %s", workingDir)
+
+		if err := os.MkdirAll(path.Join(container.RootfsPath(), workingDir), 0755); err != nil {
+			return nil
+		}
+
+		params = append(params,
+			"-w", workingDir,
+		)
+	}
 
 	for _, elem := range container.Config.Env {
 		params = append(params, "-e", elem)
@@ -807,7 +843,7 @@ func (container *Container) monitor() {
 	}
 	utils.Debugf("Process finished")
 	if container.runtime != nil && container.runtime.srv != nil {
-		container.runtime.srv.LogEvent("die", container.ShortID())
+		container.runtime.srv.LogEvent("die", container.ShortID(), container.runtime.repositories.ImageName(container.Image))
 	}
 	exitCode := -1
 	if container.cmd != nil {
@@ -1086,4 +1122,25 @@ func (container *Container) GetSize() (int64, int64) {
 		})
 	}
 	return sizeRw, sizeRootfs
+}
+
+func (container *Container) Copy(resource string) (Archive, error) {
+	if err := container.EnsureMounted(); err != nil {
+		return nil, err
+	}
+	var filter []string
+	basePath := path.Join(container.RootfsPath(), resource)
+	stat, err := os.Stat(basePath)
+	if err != nil {
+		return nil, err
+	}
+	if !stat.IsDir() {
+		d, f := path.Split(basePath)
+		basePath = d
+		filter = []string{f}
+	} else {
+		filter = []string{path.Base(basePath)}
+		basePath = path.Dir(basePath)
+	}
+	return TarFilter(basePath, Uncompressed, filter)
 }
