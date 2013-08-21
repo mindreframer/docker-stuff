@@ -30,7 +30,6 @@ type S struct {
 	runBin        string
 	runArgs       string
 	port          string
-	hostAddr      string
 	sshUser       string
 	server        *dtesting.DockerServer
 }
@@ -42,7 +41,6 @@ func (s *S) SetUpSuite(c *gocheck.C) {
 	s.imageCollName = "docker_image"
 	s.gitHost = "my.gandalf.com"
 	s.repoNamespace = "tsuru"
-	s.hostAddr = "10.0.0.4"
 	s.sshUser = "root"
 	config.Set("git:ro-host", s.gitHost)
 	config.Set("database:url", "127.0.0.1:27017")
@@ -50,7 +48,6 @@ func (s *S) SetUpSuite(c *gocheck.C) {
 	config.Set("docker:repository-namespace", s.repoNamespace)
 	config.Set("docker:router", "fake")
 	config.Set("docker:collection", s.collName)
-	config.Set("docker:host-address", s.hostAddr)
 	config.Set("docker:deploy-cmd", "/var/lib/tsuru/deploy")
 	config.Set("docker:run-cmd:bin", "/usr/local/bin/circusd /etc/circus/circus.ini")
 	config.Set("docker:run-cmd:port", "8888")
@@ -74,12 +71,16 @@ func (s *S) SetUpSuite(c *gocheck.C) {
 	dCluster, _ = cluster.New(nil,
 		cluster.Node{ID: "server", Address: s.server.URL()},
 	)
-
 }
 
 func (s *S) TearDownSuite(c *gocheck.C) {
 	s.conn.Collection(s.collName).Database.DropDatabase()
 	fsystem = nil
+}
+
+func (s *S) SetUp(c *gocheck.C) {
+	clusterNodes = map[string]string{"server": s.server.URL()}
+	config.Unset("docker:registry")
 }
 
 type unitSlice []provision.Unit
