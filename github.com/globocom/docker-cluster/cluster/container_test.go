@@ -38,12 +38,31 @@ func TestCreateContainer(t *testing.T) {
 		t.Fatal(err)
 	}
 	config := docker.Config{Memory: 67108864}
-	container, err := cluster.CreateContainer(&config)
+	nodeID, container, err := cluster.CreateContainer(&config)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if nodeID != "handler0" {
+		t.Errorf("CreateContainer: wrong node  ID. Want %q. Got %q.", "handler0", nodeID)
+	}
 	if container.ID != "e90302" {
 		t.Errorf("CreateContainer: wrong container ID. Want %q. Got %q.", "e90302", container.ID)
+	}
+}
+
+func TestCreateContainerFailure(t *testing.T) {
+	server1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "NoSuchImage", http.StatusNotFound)
+	}))
+	defer server1.Close()
+	cluster, err := New(nil, Node{ID: "handler0", Address: server1.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := docker.Config{Memory: 67108864}
+	_, _, err = cluster.CreateContainer(&config)
+	if err == nil {
+		t.Error("Got unexpected <nil> error")
 	}
 }
 
@@ -72,13 +91,13 @@ func TestCreateContainerWithStorage(t *testing.T) {
 	var storage mapStorage
 	cluster.SetStorage(&storage)
 	config := docker.Config{Memory: 67108864}
-	_, err = cluster.CreateContainer(&config)
+	_, _, err = cluster.CreateContainer(&config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	expected := map[string]string{"e90302": "handler0"}
-	if storage.m["e90302"] != "handler0" {
-		t.Errorf("Cluster.CreateContainer() with storage: wrong data. Want %#v. Got %#v.", expected, storage.m)
+	if storage.cMap["e90302"] != "handler0" {
+		t.Errorf("Cluster.CreateContainer() with storage: wrong data. Want %#v. Got %#v.", expected, storage.cMap)
 	}
 }
 
@@ -138,7 +157,7 @@ func TestInspectContainerWithStorage(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := "e90302"
-	storage := mapStorage{m: map[string]string{id: "handler1"}}
+	storage := mapStorage{cMap: map[string]string{id: "handler1"}}
 	cluster.SetStorage(&storage)
 	container, err := cluster.InspectContainer(id)
 	if err != nil {
@@ -265,7 +284,7 @@ func TestKillContainerWithStorage(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := "abc123"
-	storage := mapStorage{m: map[string]string{id: "handler1"}}
+	storage := mapStorage{cMap: map[string]string{id: "handler1"}}
 	cluster.SetStorage(&storage)
 	err = cluster.KillContainer(id)
 	if err != nil {
@@ -457,7 +476,7 @@ func TestRemoveContainerWithStorage(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := "abc123"
-	storage := mapStorage{m: map[string]string{id: "handler1"}}
+	storage := mapStorage{cMap: map[string]string{id: "handler1"}}
 	cluster.SetStorage(&storage)
 	err = cluster.RemoveContainer(id)
 	if err != nil {
@@ -466,7 +485,7 @@ func TestRemoveContainerWithStorage(t *testing.T) {
 	if called {
 		t.Errorf("RemoveContainer(%q): should not call the node server", id)
 	}
-	_, err = storage.Retrieve(id)
+	_, err = storage.RetrieveContainer(id)
 	if err == nil {
 		t.Errorf("RemoveContainer(%q): should remove the container from the storage", id)
 	}
@@ -533,7 +552,7 @@ func TestStartContainerWithStorage(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := "abc123"
-	storage := mapStorage{m: map[string]string{id: "handler1"}}
+	storage := mapStorage{cMap: map[string]string{id: "handler1"}}
 	cluster.SetStorage(&storage)
 	err = cluster.StartContainer(id)
 	if err != nil {
@@ -605,7 +624,7 @@ func TestStopContainerWithStorage(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := "abc123"
-	storage := mapStorage{m: map[string]string{id: "handler1"}}
+	storage := mapStorage{cMap: map[string]string{id: "handler1"}}
 	cluster.SetStorage(&storage)
 	err = cluster.StopContainer(id, 10)
 	if err != nil {
@@ -677,7 +696,7 @@ func TestRestartContainerWithStorage(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := "abc123"
-	storage := mapStorage{m: map[string]string{id: "handler1"}}
+	storage := mapStorage{cMap: map[string]string{id: "handler1"}}
 	cluster.SetStorage(&storage)
 	err = cluster.RestartContainer(id, 10)
 	if err != nil {
@@ -777,7 +796,7 @@ func TestWaitContainerWithStorage(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := "abc123"
-	storage := mapStorage{m: map[string]string{id: "handler1"}}
+	storage := mapStorage{cMap: map[string]string{id: "handler1"}}
 	cluster.SetStorage(&storage)
 	expected := 34
 	status, err := cluster.WaitContainer(id)
@@ -862,7 +881,7 @@ func TestAttachToContainerWithStorage(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := "abcdef"
-	storage := mapStorage{m: map[string]string{id: "handler1"}}
+	storage := mapStorage{cMap: map[string]string{id: "handler1"}}
 	cluster.SetStorage(&storage)
 	opts := dclient.AttachToContainerOptions{
 		Container:    id,
@@ -966,7 +985,6 @@ func TestCommitContainerWithStorage(t *testing.T) {
 		w.Write([]byte(`{"Id":"596069db4bf5"}`))
 	}))
 	defer server2.Close()
-	defer server2.Close()
 	cluster, err := New(nil,
 		Node{ID: "handler0", Address: server1.URL},
 		Node{ID: "handler1", Address: server2.URL},
@@ -975,9 +993,12 @@ func TestCommitContainerWithStorage(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := "abc123"
-	storage := mapStorage{m: map[string]string{id: "handler1"}}
+	storage := mapStorage{
+		cMap: map[string]string{id: "handler1"},
+		iMap: map[string]string{},
+	}
 	cluster.SetStorage(&storage)
-	opts := dclient.CommitContainerOptions{Container: id}
+	opts := dclient.CommitContainerOptions{Container: id, Repository: "tsuru/python"}
 	image, err := cluster.CommitContainer(opts)
 	if err != nil {
 		t.Fatal(err)
@@ -987,6 +1008,34 @@ func TestCommitContainerWithStorage(t *testing.T) {
 	}
 	if called {
 		t.Errorf("CommitContainer(%q): should not call the all node servers.", id)
+	}
+	if node := storage.iMap["tsuru/python"]; node != "handler1" {
+		t.Errorf("CommitContainer(%q): wrong image ID in the storage. Want %q. Got %q", id, "handler1", node)
+	}
+}
+
+func TestCommitContainerWithStorageAndImageID(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"Id":"596069db4bf5"}`))
+	}))
+	defer server.Close()
+	cluster, err := New(nil, Node{ID: "handler0", Address: server.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := "abc123"
+	storage := mapStorage{
+		cMap: map[string]string{id: "handler0"},
+		iMap: map[string]string{},
+	}
+	cluster.SetStorage(&storage)
+	opts := dclient.CommitContainerOptions{Container: id}
+	image, err := cluster.CommitContainer(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if node := storage.iMap[image.ID]; node != "handler0" {
+		t.Errorf("CommitContainer(%q): wrong image ID in the storage. Want %q. Got %q", id, "handler0", node)
 	}
 }
 
@@ -1015,23 +1064,23 @@ func TestGetNode(t *testing.T) {
 		t.Fatal(err)
 	}
 	var storage mapStorage
-	storage.Store("e90301", "handler1")
-	storage.Store("e90304", "handler1")
-	storage.Store("e90303", "handler2")
-	storage.Store("e90302", "handler3")
+	storage.StoreContainer("e90301", "handler1")
+	storage.StoreContainer("e90304", "handler1")
+	storage.StoreContainer("e90303", "handler2")
+	storage.StoreContainer("e90302", "handler3")
 	cluster.SetStorage(&storage)
-	_, err = cluster.getNode("e90302")
+	_, err = cluster.getNodeForContainer("e90302")
 	if err != ErrUnknownNode {
 		t.Errorf("cluster.getNode(%q): wrong error. Want %#v. Got %#v.", "e90302", ErrUnknownNode, err)
 	}
-	node, err := cluster.getNode("e90301")
+	node, err := cluster.getNodeForContainer("e90301")
 	if err != nil {
 		t.Error(err)
 	}
 	if node.id != "handler1" {
 		t.Errorf("cluster.getNode(%q): wrong node. Want %q. Got %q.", "e90301", "handler1", node.id)
 	}
-	_, err = cluster.getNode("e90305")
+	_, err = cluster.getNodeForContainer("e90305")
 	expected := dclient.NoSuchContainer{ID: "e90305"}
 	if !reflect.DeepEqual(err, &expected) {
 		t.Errorf("cluster.getNode(%q): wrong error. Want %#v. Got %#v.", "e90305", expected, err)
@@ -1041,7 +1090,7 @@ func TestGetNode(t *testing.T) {
 		t.Fatal(err)
 	}
 	cluster.SetStorage(&storage)
-	_, err = cluster.getNode("e90301")
+	_, err = cluster.getNodeForContainer("e90301")
 	expectedMsg := "Cannot retrieve list of nodes"
 	if err.Error() != expectedMsg {
 		t.Errorf("cluster.getNode(%q): wrong error. Want %q. Got %q.", "e90301", expectedMsg, err.Error())

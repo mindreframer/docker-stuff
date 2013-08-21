@@ -15,24 +15,41 @@ import (
 	"sync"
 )
 
-// ErrUnknownNode is the error returned when an unknown node is stored in the
-// storage. This error means some kind of inconsistence between the storage and
-// the cluster.
-var ErrUnknownNode = errors.New("Unknown node")
+var (
+	// ErrUnknownNode is the error returned when an unknown node is stored in the
+	// storage. This error means some kind of inconsistence between the storage and
+	// the cluster.
+	ErrUnknownNode = errors.New("Unknown node")
 
-// ErrImmutableCluster is the error returned by Register when the cluster is
-// immutable, meaning that no new nodes can be registered.
-var ErrImmutableCluster = errors.New("Immutable cluster")
+	// ErrImmutableCluster is the error returned by Register when the cluster is
+	// immutable, meaning that no new nodes can be registered.
+	ErrImmutableCluster = errors.New("Immutable cluster")
 
-// Storage provides methods to store and retrieve information about the
-// relation between the node and the container. It can be easily represented as
-// a key-value storage.
+	errStorageDisabled = errors.New("Storage is disabled")
+)
+
+// ContainerStorage provides methods to store and retrieve information about
+// the relation between the node and the container. It can be easily
+// represented as a key-value storage.
 //
 // The relevant information is: in which host the given container is running?
+type ContainerStorage interface {
+	StoreContainer(container, host string) error
+	RetrieveContainer(container string) (host string, err error)
+	RemoveContainer(container string) error
+}
+
+// ImageStorage works like ContainerStorage, but stores information about
+// images and hosts.
+type ImageStorage interface {
+	StoreImage(image, host string) error
+	RetrieveImage(image string) (host string, err error)
+	RemoveImage(image string) error
+}
+
 type Storage interface {
-	Store(container, host string) error
-	Retrieve(container string) (host string, err error)
-	Remove(container string) error
+	ContainerStorage
+	ImageStorage
 }
 
 // Node represents a host running Docker. Each node has an ID and an address
@@ -95,15 +112,15 @@ func (c *Cluster) storage() Storage {
 
 type nodeFunc func(node) (interface{}, error)
 
-func (c *Cluster) runOnNodes(fn nodeFunc, errNotFound error) (interface{}, error) {
+func (c *Cluster) runOnNodes(fn nodeFunc, errNotFound error, wait bool) (interface{}, error) {
 	nodes, err := c.scheduler.Nodes()
 	if err != nil {
 		return nil, err
 	}
 	var wg sync.WaitGroup
-	finish := make(chan int8, 1)
+	finish := make(chan int8, len(nodes))
 	errChan := make(chan error, len(nodes))
-	result := make(chan interface{}, 1)
+	result := make(chan interface{}, len(nodes))
 	for _, n := range nodes {
 		wg.Add(1)
 		client, _ := docker.NewClient(n.Address)
@@ -118,6 +135,17 @@ func (c *Cluster) runOnNodes(fn nodeFunc, errNotFound error) (interface{}, error
 				errChan <- err
 			}
 		}(node{id: n.ID, Client: client})
+	}
+	if wait {
+		wg.Wait()
+		select {
+		case value := <-result:
+			return value, nil
+		case err := <-errChan:
+			return nil, err
+		default:
+			return nil, errNotFound
+		}
 	}
 	go func() {
 		wg.Wait()
@@ -136,4 +164,27 @@ func (c *Cluster) runOnNodes(fn nodeFunc, errNotFound error) (interface{}, error
 			return nil, errNotFound
 		}
 	}
+}
+
+func (c *Cluster) getNode(retrieveFn func(Storage) (string, error)) (node, error) {
+	var n node
+	storage := c.storage()
+	if storage == nil {
+		return n, errStorageDisabled
+	}
+	id, err := retrieveFn(storage)
+	if err != nil {
+		return n, err
+	}
+	nodes, err := c.scheduler.Nodes()
+	if err != nil {
+		return n, err
+	}
+	for _, nd := range nodes {
+		if nd.ID == id {
+			client, _ := docker.NewClient(nd.Address)
+			return node{id: nd.ID, Client: client, edp: nd.Address}, nil
+		}
+	}
+	return n, ErrUnknownNode
 }
