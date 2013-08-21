@@ -4,7 +4,6 @@ import logging
 import string
 import random
 import urllib
-import time
 import re
 
 from flask import current_app, request, session
@@ -38,23 +37,15 @@ def response(data=None, code=200, headers=None, raw=False):
 
 
 def check_session():
-    def invalidate_session():
-        session['timestamp'] = 0
-        return False
     if not session:
         logger.debug('check_session: Session is empty')
         return False
-    now = int(time.time())
-    if (now - session.get('timestamp', 0)) > 3600:
-        # Session expires after 1 hour
-        logger.debug('check_session: Session expired')
-        return invalidate_session()
-    if get_remote_ip() != session.get('from'):
+    if 'from' in session and get_remote_ip() != session['from']:
         logger.debug('check_session: Wrong source ip address')
-        return invalidate_session()
-    # Session is valid, refresh it for one more hour
-    session['timestamp'] = now
-    return True
+        session.clear()
+        return False
+    # Session is valid
+    return session.get('auth') is True
 
 
 def validate_token(auth):
@@ -87,9 +78,19 @@ def validate_token(auth):
 
 
 def get_remote_ip():
-    if 'x-real-ip' in request.headers:
-        return request.headers['x-real-ip']
+    if 'X-Forwarded-For' in request.headers:
+        return request.headers.getlist('X-Forwarded-For')[0]
+    if 'X-Real-Ip' in request.headers:
+        return request.headers.getlist('X-Real-Ip')[0]
     return request.remote_addr
+
+
+def is_ssl():
+    for header in ('X-Forwarded-Proto', 'X-Forwarded-Protocol'):
+        if header in request.headers and \
+                request.headers[header].lower() in ('https', 'ssl'):
+                    return True
+    return False
 
 
 _auth_exp = re.compile(r'(\w+)[:=][\s"]?([^",]+)"?')
@@ -133,9 +134,12 @@ def check_token(args):
     if validate_token(auth) is False:
         return False
     # Token is valid, we create a session
-    session['from'] = get_remote_ip()
-    session['timestamp'] = int(time.time())
     session['repository'] = auth.get('repository')
+    session['auth'] = True
+    session.permanent = True
+    if is_ssl() is False:
+        # We enforce the IP check only when not using SSL
+        session['from'] = get_remote_ip()
     return True
 
 

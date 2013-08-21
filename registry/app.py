@@ -1,12 +1,13 @@
 
 import logging
+import datetime
 from flask import Flask
 
 import config
 from toolkit import response, gen_random_string
 
 
-VERSION = '0.5.4'
+VERSION = '0.5.7'
 app = Flask('docker-registry')
 cfg = config.load()
 loglevel = getattr(logging, cfg.get('loglevel', 'INFO').upper())
@@ -38,6 +39,8 @@ def init():
         Flask.secret_key = cfg.secret_key
     else:
         Flask.secret_key = gen_random_string(64)
+    # Set the session duration time to 1 hour
+    Flask.permanent_session_lifetime = datetime.timedelta(seconds=3600)
     # Configure the email exceptions
     info = cfg.email_exceptions
     if info:
