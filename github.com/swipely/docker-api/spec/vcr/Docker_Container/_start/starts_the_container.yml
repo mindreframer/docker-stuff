@@ -2,15 +2,15 @@
 http_interactions:
 - request:
     method: post
-    uri: http://localhost:4243/v1.3/containers/create
+    uri: http://localhost:4243/v1.4/containers/create
     body:
       encoding: UTF-8
-      string: ! '{"Cmd":["true"],"Image":"base"}'
+      string: ! '{"Cmd":["test","-d","/foo"],"Image":"base","Volumes":{"/foo":{}}}'
     headers:
       Content-Type:
       - text/plain
       User-Agent:
-      - Docker-Client/0.4.6
+      - Swipely/Docker-API 1.4.0
   response:
     status:
       code: 201
@@ -24,23 +24,23 @@ http_interactions:
         MjE=
       !binary "RGF0ZQ==":
       - !binary |-
-        V2VkLCAyNiBKdW4gMjAxMyAxODowOTo1MSBHTVQ=
+        RnJpLCAwOSBBdWcgMjAxMyAwODo1MDowNSBHTVQ=
     body:
       encoding: US-ASCII
-      string: ! '{"Id":"d9c65f66161c"}'
+      string: ! '{"Id":"3632688f5774"}'
     http_version: 
-  recorded_at: Wed, 26 Jun 2013 18:09:51 GMT
+  recorded_at: Fri, 09 Aug 2013 08:50:06 GMT
 - request:
     method: post
-    uri: http://localhost:4243/v1.3/containers/d9c65f66161c/start
+    uri: http://localhost:4243/v1.4/containers/3632688f5774/start
     body:
-      encoding: US-ASCII
-      string: ''
+      encoding: UTF-8
+      string: ! '{"Binds":["/tmp:/foo"]}'
     headers:
       Content-Type:
-      - text/plain
+      - application/json
       User-Agent:
-      - Docker-Client/0.4.6
+      - Swipely/Docker-API 1.4.0
   response:
     status:
       code: 204
@@ -54,15 +54,15 @@ http_interactions:
         MA==
       !binary "RGF0ZQ==":
       - !binary |-
-        V2VkLCAyNiBKdW4gMjAxMyAxODowOTo1MSBHTVQ=
+        RnJpLCAwOSBBdWcgMjAxMyAwODo1MDowNiBHTVQ=
     body:
       encoding: US-ASCII
       string: ''
     http_version: 
-  recorded_at: Wed, 26 Jun 2013 18:09:51 GMT
+  recorded_at: Fri, 09 Aug 2013 08:50:06 GMT
 - request:
     method: get
-    uri: http://localhost:4243/v1.3/containers/json
+    uri: http://localhost:4243/v1.4/containers/json
     body:
       encoding: US-ASCII
       string: ''
@@ -70,7 +70,7 @@ http_interactions:
       Content-Type:
       - text/plain
       User-Agent:
-      - Docker-Client/0.4.6
+      - Swipely/Docker-API 1.4.0
   response:
     status:
       code: 200
@@ -81,14 +81,73 @@ http_interactions:
         YXBwbGljYXRpb24vanNvbg==
       !binary "Q29udGVudC1MZW5ndGg=":
       - !binary |-
-        MjA3
+        OTQ2
       !binary "RGF0ZQ==":
       - !binary |-
-        V2VkLCAyNiBKdW4gMjAxMyAxODowOTo1MSBHTVQ=
+        RnJpLCAwOSBBdWcgMjAxMyAwODo1MDowNiBHTVQ=
     body:
       encoding: US-ASCII
-      string: ! '[{"Id":"d9c65f66161c65692f880df0251c8783b2ef53f05c53d13dd2fae63bc9c640a9","Image":"base2:latest","Command":"true
-        ","Created":1372270191,"Status":"Up Less than a second","Ports":"","SizeRw":0,"SizeRootFs":0}]'
+      string: ! '[{"Id":"3632688f5774a1a5077e0b29e4410458ae43ec9dbaa400b10e68b385206e0cff","Image":"base:latest","Command":"test
+        -d /foo","Created":1376038205,"Status":"Up Less than a second","Ports":"","SizeRw":0,"SizeRootFs":0},{"Id":"965d1be64f580f590fa712f6e34b1186cd937f1448b6d5feeeb02174dd562cba","Image":"c401009f3872","Command":"/bin/bash
+        --login -c cd /app && bundle exec rackup -p $PORT","Created":1376001906,"Status":"Up
+        10 hours","Ports":"","SizeRw":0,"SizeRootFs":0},{"Id":"371a31ee0515e231b53331827e2169a781d605259ca75f0d1b1593095fee6924","Image":"69e523818a5f","Command":"/bin/bash
+        --login -c cd /app && bundle exec rackup config.ru -p 80","Created":1375967943,"Status":"Up
+        19 hours","Ports":"","SizeRw":0,"SizeRootFs":0},{"Id":"c7a4fe69a7249d6db5f24106891e1c28ee4bfe538ece09a53574c0b91850f165","Image":"samalba/hipache:latest","Command":"supervisord
+        -n","Created":1375657256,"Status":"Up 19 hours","Ports":"80-\u003e80","SizeRw":0,"SizeRootFs":0}]'
     http_version: 
-  recorded_at: Wed, 26 Jun 2013 18:09:51 GMT
+  recorded_at: Fri, 09 Aug 2013 08:50:06 GMT
+- request:
+    method: post
+    uri: http://localhost:4243/v1.4/containers/3632688f5774/wait
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Content-Type:
+      - text/plain
+      User-Agent:
+      - Swipely/Docker-API 1.4.0
+  response:
+    status:
+      code: 200
+      message: ''
+    headers:
+      !binary "Q29udGVudC1UeXBl":
+      - !binary |-
+        YXBwbGljYXRpb24vanNvbg==
+      !binary "Q29udGVudC1MZW5ndGg=":
+      - !binary |-
+        MTY=
+      !binary "RGF0ZQ==":
+      - !binary |-
+        RnJpLCAwOSBBdWcgMjAxMyAwODo1MDowNiBHTVQ=
+    body:
+      encoding: US-ASCII
+      string: ! '{"StatusCode":0}'
+    http_version: 
+  recorded_at: Fri, 09 Aug 2013 08:50:06 GMT
+- request:
+    method: post
+    uri: http://localhost:4243/v1.4/containers/3632688f5774/attach?logs=true&stderr=true&stdout=true&stream=false
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Content-Type:
+      - text/plain
+      User-Agent:
+      - Swipely/Docker-API 1.4.0
+  response:
+    status:
+      code: 200
+      message: ''
+    headers:
+      !binary "Q29udGVudC1UeXBl":
+      - !binary |-
+        YXBwbGljYXRpb24vdm5kLmRvY2tlci5yYXctc3RyZWFt
+    body:
+      encoding: US-ASCII
+      string: ''
+    http_version: 
+  recorded_at: Fri, 09 Aug 2013 08:50:06 GMT
 recorded_with: VCR 2.5.0
