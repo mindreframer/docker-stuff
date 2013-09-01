@@ -16,7 +16,6 @@ https://github.com/georgebashi/docker-simpleregistry.git
 https://github.com/globocom/docker-cluster.git
 https://github.com/globocom/tsuru.git
 https://github.com/jamescarr/puppet-docker-registry.git
-https://github.com/jamescarr/puppet-docker-registry.git
 https://github.com/justone/docker-mongodb.git
 https://github.com/kencochrane/docker-tutorial.git
 https://github.com/kstaken/dockerfile-examples.git
