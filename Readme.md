@@ -49,6 +49,10 @@ Articles:
       Configuring haproxy to automatically redirect to docker instances
        26 commits, last change: 2013-07-16 08:37:06, 9 stars, 1 forks
 
+    cmfatih/docker-vmi-builder:
+      Docker VMI (Virtual Machine Image) Builder
+       4 commits, last change: 2013-08-27 17:21:46, 24 stars, 0 forks
+
     crosbymichael/dockerui:
       A web interface for docker. http://docker.io
        72 commits, last change: 2013-09-02 20:35:51, 818 stars, 37 forks
