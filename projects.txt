@@ -32,3 +32,4 @@ https://github.com/rainforestapp/Docker-Terminal.git
 https://github.com/shingara/dockerfiles.git
 https://github.com/swipely/docker-api.git
 https://github.com/toscanini/maestro.git
+https://github.com/cvlc/orchestrator.git
