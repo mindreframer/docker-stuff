@@ -3,6 +3,7 @@ https://github.com/andrewh/dockerfiles.git
 https://github.com/aschmidt75/haproxy-docker-config.git
 https://github.com/cmfatih/docker-vmi-builder.git
 https://github.com/crosbymichael/dockerui.git
+https://github.com/cvlc/orchestrator.git
 https://github.com/dotcloud/docker-registry.git
 https://github.com/dotcloud/docker.git
 https://github.com/dotcloud/dockerlite.git
@@ -32,4 +33,3 @@ https://github.com/rainforestapp/Docker-Terminal.git
 https://github.com/shingara/dockerfiles.git
 https://github.com/swipely/docker-api.git
 https://github.com/toscanini/maestro.git
-https://github.com/cvlc/orchestrator.git
