@@ -59,6 +59,34 @@ describe Docker::Container do
     end
   end
 
+  describe '#copy' do
+    subject { Docker::Image.create('fromImage' => 'base').run('ls') }
+
+    context 'when the file does not exist' do
+      it 'raises an error', :vcr do
+        expect { subject.copy('/lol/not/a/real/file') { |chunk| puts chunk } }
+            .to raise_error
+      end
+    end
+
+    context 'when the input is a file' do
+      it 'yields each chunk of the tarred file', :vcr do
+        chunks = []
+        subject.copy('/etc/hosts') { |chunk| chunks << chunk }
+        chunks.join("\n").should include('localhost')
+      end
+    end
+
+    context 'when the input is a directory' do
+      it 'yields each chunk of the tarred directory', :vcr do
+        chunks = []
+        subject.copy('/etc/vim') { |chunk| chunks << chunk }
+        chunks = chunks.join("\n")
+        %w[vimrc vimrc.tiny].should be_all { |file| chunks.include?(file) }
+      end
+    end
+  end
+
   describe '#export' do
     subject { described_class.create('Cmd' => %w[rm -rf / --no-preserve-root],
                                      'Image' => 'base') }
@@ -128,6 +156,20 @@ describe Docker::Container do
 
     it 'kills the container', :vcr do
       subject.kill
+      described_class.all.map(&:id).should be_none { |id|
+        id.start_with?(subject.id)
+      }
+      described_class.all(:all => true).map(&:id).should be_any { |id|
+        id.start_with?(subject.id)
+      }
+    end
+  end
+
+  describe '#delete' do
+    subject { described_class.create('Cmd' => ['ls'], 'Image' => 'base') }
+
+    it 'deletes the container', :vcr do
+      subject.delete
       described_class.all.map(&:id).should be_none { |id|
         id.start_with?(subject.id)
       }

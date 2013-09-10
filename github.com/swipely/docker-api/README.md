@@ -10,7 +10,7 @@ Installation
 Add this line to your application's Gemfile:
 
 ```ruby
-gem 'docker-api'
+gem 'docker-api', :require => 'docker'
 ```
 
 And then run:
@@ -94,9 +94,14 @@ require 'docker'
 Docker::Image.create('fromRepo' => 'base')
 # => Docker::Image { :id => ae7ffbcd1, :connection => Docker::Connection { :url => http://localhost, :options => {:port=>4243} } }
 
-# Insert a file into an Image. Returns a new Image that contains that file.
+# Insert a file into an Image from a url.
 image.insert('path' => '/google', 'url' => 'http://google.com')
 # => Docker::Image { :id => 11ef6c882, :connection => Docker::Connection { :url => http://localhost, :options => {:port=>4243} } }
+
+# Insert a local file into an Image.
+image.insert_local('localPath' => 'Gemfile', 'outputPath' => '/')
+# => Docker::Image { :id => 682ea192f, :connection => Docker::Connection { :url => http://localhost, :options => {:port=>4243} } }
+
 
 # Tag an Image.
 image.tag('repo' => 'base2', 'force' => true)
@@ -189,6 +194,20 @@ end
 container.changes
 # => [{'Path'=>'/dev', 'Kind'=>0}, {'Path'=>'/dev/kmsg', 'Kind'=>1}]
 
+# Copy files/directories from the Container. Note that these are exported as tars.
+container.copy('/etc/hosts') { |chunk| puts chunk }
+
+hosts0000644000000000000000000000023412100405636007023 0ustar
+127.0.0.1       localhost
+::1             localhost ip6-localhost ip6-loopback
+fe00::0         ip6-localnet
+ff00::0         ip6-mcastprefix
+ff02::1         ip6-allnodes
+ff02::2         ip6-allrouters
+# => Docker::Container { :id => a1759f3e2873, :connection => Docker::Connection { :url => http://localhost, :options => {:port=>4243} } }
+
+
+
 # Wait for the current command to finish executing. If an argument is given,
 # will timeout after that number of seconds. The default is one minute.
 container.wait(15)
@@ -212,6 +231,10 @@ container.commit
 # of seconds the Container should wait before stopping its current command.
 container.run('pwd', 10)
 # => Docker::Image { :id => 4427be4199ac, :connection => Docker::Connection { :url => http://localhost, :options => {:port=>4243} } }
+
+# Delete a Container.
+container.delete
+# => nil
 
 # Request all of the Containers. By default, will only return the running Containers.
 Docker::Container.all(:all => true)
