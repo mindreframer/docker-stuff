@@ -15,22 +15,24 @@ from django.db import models
 from django.contrib.auth.models import User
 from docker import client
 from django.conf import settings
+from django.db.models import Q
 from docker import client
 from django.core.cache import cache
 from shipyard import utils
 import json
 import hashlib
+import requests
 
 HOST_CACHE_TTL = getattr(settings, 'HOST_CACHE_TTL', 15)
 CONTAINER_KEY = '{0}:containers'
 IMAGE_KEY = '{0}:images'
 
 class Host(models.Model):
-    name = models.CharField(max_length=64, null=True, blank=True,
+    name = models.CharField(max_length=64, null=True,
         unique=True)
-    hostname = models.CharField(max_length=128, null=True, blank=True,
+    hostname = models.CharField(max_length=128, null=True,
         unique=True)
-    port = models.SmallIntegerField(null=True, blank=True, default=4243)
+    port = models.SmallIntegerField(null=True, default=4243)
     enabled = models.NullBooleanField(null=True, default=True)
 
     def __unicode__(self):
@@ -67,7 +69,10 @@ class Host(models.Model):
         containers = cache.get(key)
         container_ids = []
         if containers is None:
-            containers = c.containers(all=show_all)
+            try:
+                containers = c.containers(all=show_all)
+            except requests.ConnectionError:
+                containers = []
             # update meta data
             for x in containers:
                 # only get first 12 chars of id (for metatdata)
@@ -76,9 +81,13 @@ class Host(models.Model):
                 meta = c.inspect_container(c_id)
                 m, created = Container.objects.get_or_create(
                     container_id=c_id, host=self)
+                m.is_running = meta.get('State', {}).get('Running', False)
                 m.meta = json.dumps(meta)
                 m.save()
                 container_ids.append(c_id)
+            # set extra containers to not running
+            Container.objects.filter(host=self).exclude(
+                container_id__in=container_ids).update(is_running=False)
             cache.set(key, containers, HOST_CACHE_TTL)
         return containers
 
@@ -98,17 +107,22 @@ class Host(models.Model):
         key = IMAGE_KEY.format(self.name)
         images = cache.get(key)
         if images is None:
-            images = c.images(all=show_all)
-            cache.set(key, images, HOST_CACHE_TTL)
+            try:
+                # only show images with a repository name
+                images = [x for x in c.images(all=show_all) if x.get('Repository')]
+                cache.set(key, images, HOST_CACHE_TTL)
+            except requests.ConnectionError:
+                images = []
         return images
 
     def create_container(self, image=None, command=None, ports=[],
         environment=[], memory=0, description='', volumes=[],
-        volumes_from='', owner=None):
+        volumes_from='', privileged=False, owner=None):
         c = self._get_client()
         cnt = c.create_container(image, command, detach=True, ports=ports,
             mem_limit=memory, tty=True, stdin_open=True,
-            environment=environment, volumes=volumes, volumes_from=volumes_from)
+            environment=environment, volumes=volumes, volumes_from=volumes_from,
+            privileged=privileged)
         c_id = cnt.get('Id')
         c.start(c_id)
         status = False
@@ -173,14 +187,31 @@ class Container(models.Model):
     container_id = models.CharField(max_length=96, null=True, blank=True)
     description = models.TextField(blank=True, null=True, default='')
     meta = models.TextField(blank=True, null=True, default='{}')
+    is_running = models.BooleanField(default=True)
     host = models.ForeignKey(Host, null=True, blank=True)
     owner = models.ForeignKey(User, null=True, blank=True)
 
     def __unicode__(self):
         d = self.container_id
         if self.description:
-            d += '({0})'.format(self.description)
+            d += ' ({0})'.format(self.description)
         return d
+
+    @classmethod
+    def get_running(cls, user=None):
+        hosts = Host.objects.filter(enabled=True)
+        containers = None
+        if hosts:
+            c_ids = []
+            for h in hosts:
+                for c in h.get_containers():
+                    c_ids.append(utils.get_short_id(c.get('Id')))
+            # return metadata objects
+            containers = Container.objects.filter(container_id__in=c_ids).filter(
+                Q(owner=None))
+            if user:
+                containers = containers.filter(Q(owner=request.user))
+        return containers
 
     def is_public(self):
         if self.user == None:
@@ -205,3 +236,8 @@ class Container(models.Model):
             mem = int(meta.get('Config', {}).get('Memory')) / 1048576
         return mem
 
+    def get_name(self):
+        d = self.container_id
+        if self.description:
+            d = self.description
+        return d

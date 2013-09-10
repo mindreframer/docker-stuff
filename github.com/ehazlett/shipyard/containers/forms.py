@@ -14,9 +14,10 @@
 from django import forms
 from containers.models import Host
 from crispy_forms.helper import FormHelper
-from crispy_forms.layout import Layout, Fieldset, ButtonHolder, Submit
-from crispy_forms.bootstrap import FieldWithButtons, StrictButton
+from crispy_forms.layout import Layout, Fieldset, ButtonHolder, Submit, Button
+from crispy_forms.bootstrap import FieldWithButtons, StrictButton, FormActions
 from django.core.urlresolvers import reverse
+from django.utils.translation import ugettext as _
 
 def get_available_hosts():
     return Host.objects.filter(enabled=True)
@@ -37,35 +38,44 @@ def get_image_choices():
     choices.sort()
     return choices
 
-class HostForm(forms.ModelForm):
-    def __init__(self, *args, **kwargs):
-        super(HostForm, self).__init__(*args, **kwargs)
-        self.helper = FormHelper()
-        self.helper.form_id = 'form-add-host'
-        self.helper.form_class = 'form-horizontal'
-        self.helper.form_action = reverse('containers.views.add_host')
-
-    class Meta:
-        model = Host
-        fields = ('name', 'hostname', 'port')
-
 class CreateContainerForm(forms.Form):
-    image = forms.ChoiceField()
+    image = forms.ChoiceField(required=True)
     description = forms.CharField(required=False)
     command = forms.CharField(required=False)
-    memory = forms.CharField(required=False, help_text='Memory in MB')
+    memory = forms.CharField(required=False, max_length=8,
+        help_text='Memory in MB')
     environment = forms.CharField(required=False,
         help_text='key=value space separated pairs')
     ports = forms.CharField(required=False, help_text='space separated')
     volume = forms.CharField(required=False, help_text='container volume (i.e. /mnt/volume)')
     volumes_from = forms.CharField(required=False,
         help_text='mount volumes from specified container')
-    hosts = forms.MultipleChoiceField()
-    private = forms.BooleanField()
+    hosts = forms.MultipleChoiceField(required=True)
+    private = forms.BooleanField(required=False)
+    privileged = forms.BooleanField(required=False)
 
     def __init__(self, *args, **kwargs):
         super(CreateContainerForm, self).__init__(*args, **kwargs)
-        self.helper = FormHelper()
+        self.helper = FormHelper(self)
+        self.helper.layout = Layout(
+            Fieldset(
+                None,
+                'image',
+                'command',
+                'description',
+                'memory',
+                'environment',
+                'ports',
+                'volume',
+                'volumes_from',
+                'hosts',
+                'private',
+                'privileged',
+            ),
+            FormActions(
+                Submit('save', _('Create'), css_class="btn btn-lg btn-success"),
+            )
+        )
         self.helper.form_id = 'form-create-container'
         self.helper.form_class = 'form-horizontal'
         self.helper.form_action = reverse('containers.views.create_container')
