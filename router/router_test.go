@@ -4,27 +4,48 @@
 
 package router
 
-import (
-	"reflect"
-	"testing"
-)
+import "launchpad.net/gocheck"
 
-func TestRegisterAndGet(t *testing.T) {
+func (s *S) TestRegisterAndGet(c *gocheck.C) {
 	var r Router
 	Register("router", r)
 	got, err := Get("router")
-	if err != nil {
-		t.Fatalf("Got unexpected error when getting router: %q", err)
-	}
-	if !reflect.DeepEqual(r, got) {
-		t.Errorf("Get: Want %#v. Got %#v.", r, got)
-	}
+	c.Assert(err, gocheck.IsNil)
+	c.Assert(r, gocheck.DeepEquals, got)
 	_, err = Get("unknown-router")
-	if err == nil {
-		t.Errorf("Expected non-nil error when getting unknown router, got <nil>.")
-	}
+	c.Assert(err, gocheck.Not(gocheck.IsNil))
 	expectedMessage := `Unknown router: "unknown-router".`
-	if err.Error() != expectedMessage {
-		t.Errorf("Expected error %q. Got %q.", expectedMessage, err.Error())
-	}
+	c.Assert(expectedMessage, gocheck.Equals, err.Error())
+}
+
+func (s *S) TestStore(c *gocheck.C) {
+	err := Store("appname", "routername")
+	c.Assert(err, gocheck.IsNil)
+	name, err := Retrieve("appname")
+	c.Assert(err, gocheck.IsNil)
+	c.Assert(name, gocheck.Equals, "routername")
+	err = Remove("appname")
+	c.Assert(err, gocheck.IsNil)
+}
+
+func (s *S) TestRetireveNotFound(c *gocheck.C) {
+	name, err := Retrieve("notfound")
+	c.Assert(err, gocheck.Not(gocheck.IsNil))
+	c.Assert("", gocheck.Equals, name)
+}
+
+func (s *S) TestSwapBackendName(c *gocheck.C) {
+	err := Store("appname", "routername")
+	c.Assert(err, gocheck.IsNil)
+	defer Remove("appname")
+	err = Store("appname2", "routername2")
+	c.Assert(err, gocheck.IsNil)
+	defer Remove("appname2")
+	err = swapBackendName("appname", "appname2")
+	name, err := Retrieve("appname")
+	c.Assert(err, gocheck.IsNil)
+	c.Assert(name, gocheck.Equals, "routername2")
+	name, err = Retrieve("appname2")
+	c.Assert(err, gocheck.IsNil)
+	c.Assert(name, gocheck.Equals, "routername")
 }

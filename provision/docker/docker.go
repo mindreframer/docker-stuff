@@ -348,6 +348,7 @@ func (c *container) logs(w io.Writer) error {
 		Logs:         true,
 		Stdout:       true,
 		OutputStream: w,
+		ErrorStream:  w,
 	}
 	err := dockerCluster().AttachToContainer(opts)
 	if err != nil {
@@ -358,6 +359,7 @@ func (c *container) logs(w io.Writer) error {
 		Logs:         true,
 		Stderr:       true,
 		OutputStream: w,
+		ErrorStream:  w,
 	}
 	return dockerCluster().AttachToContainer(opts)
 }
@@ -391,6 +393,16 @@ func getImage(app provision.App) string {
 
 // removeImage removes an image from docker registry
 func removeImage(imageId string) error {
+	parts := strings.SplitN(imageId, "/", 3)
+	if len(parts) > 2 {
+		registryServer := parts[0]
+		url := fmt.Sprintf("http://%s/v1/repositories/%s/tags", registryServer,
+			strings.Join(parts[1:], "/"))
+		request, err := http.NewRequest("DELETE", url, nil)
+		if err == nil {
+			http.DefaultClient.Do(request)
+		}
+	}
 	return dockerCluster().RemoveImage(imageId)
 }
 
