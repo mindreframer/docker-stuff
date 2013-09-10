@@ -88,6 +88,20 @@ class Docker::Container
     end
   end
 
+  # delete container
+  def delete(options = {})
+    connection.delete("/containers/#{self.id}", options)
+    nil
+  end
+
+  def copy(path, &block)
+    connection.post(path_for(:copy), {},
+      :body => { "Resource" => path }.to_json,
+      :response_block => block
+    )
+    self
+  end
+
   # Create a new Container.
   def self.create(opts = {}, conn = Docker.connection)
     instance = new(conn)
