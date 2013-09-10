@@ -1,6 +1,11 @@
 # Shipyard
 Shipyard is a web UI for http://docker.io
 
+# Help
+To report issues please use [Github](https://github.com/ehazlett/shipyard/issues)
+
+There is also an IRC channel setup on Freenode:  `irc.freenode.net` `#shipyard`
+
 To run the latest version on port 8000:
 
 `docker run -p :8000 ehazlett/shipyard`
@@ -25,10 +30,14 @@ is running on localhost.
 * Open browser to http://localhost:8000
 * Add a host (i.e. 127.0.0.1 for local docker)
 
-Alternate dev setup using vagrant:
+Alternate dev setup using vagrant (this will install all dependencies including
+docker itself for a self-contained dev environment):
 
 * `vagrant up`
 * `vagrant ssh`
+* `python manage.py syncdb --noinput`
+* `python manage.py migrate`
+* `python manage.py createsuperuser`
 * `./manage.py runserver 0.0.0.0:8000`
 * `./manage.py rqworker shipyard` (in separate ssh session)
 * Open browser to http://localhost:8000
@@ -43,15 +52,26 @@ Alternate dev setup using vagrant:
 * Private containers
 * Container metadata (description, etc.)
 * Applications: bind containers to applications that are setup with [hipache](https://github.com/dotcloud/hipache)
+* Attach container (terminal emulation in the browser)
 * ...more coming...
 
 # Screenshots
 
-![Login](http://i.imgur.com/7xYjQ5a.png)
+![Login](http://i.imgur.com/8WGsK2Gh.png)
 
-![Dashboard](http://i.imgur.com/pQrk3mu.png)
+![Containers](http://i.imgur.com/5DAMDw8h.png)
 
-![Create Container](http://i.imgur.com/jLgyxUz.png)
+![Container Details](http://i.imgur.com/QFDtF7C.png)
+
+![Container Logs](http://i.imgur.com/k2aZld8h.png)
+
+![Images](http://i.imgur.com/fMXZ92lh.png)
+
+![Applications](http://i.imgur.com/CgSwTRnh.png)
+
+![Hosts](http://i.imgur.com/KC7D1s0h.png)
+
+![Attach Container](http://i.imgur.com/YhiFq1gh.png)
 
 # Applications
 Applications are groups of containers that are accessible by a domain name.  The easiest
