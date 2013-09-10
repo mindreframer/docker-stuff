@@ -1,5 +1,5 @@
 :date: 2013-07-05 10:48:29
-:tags: docker, tutorial
+:tags: docker, tutorial, guidebook
 :category: blog
 :slug: the-docker-guidebook
 :author: Ken Cochrane
@@ -28,7 +28,7 @@ Introduction
 ============
 The goal of this tutorial is to introduce you to `Docker <http://docker.io>`_, show you what it can do, and how to get it up and running on your system, and how to use it to make your life better.
 
-This guide is open source and available on `github.com <https://github.com/kencochrane/docker-tutorial>`_. If you would like to add to it or fix something, please `fork it <https://github.com/kencochrane/docker-tutorial>`_ and submit a pull request.
+This guide is open source and available on `github.com <https://github.com/kencochrane/docker-guidebook>`_. If you would like to add to it or fix something, please `fork it <https://github.com/kencochrane/docker-guidebook>`_ and submit a pull request.
 
 .. sectnum::
 
@@ -439,12 +439,12 @@ Now that you know the basics go to part 2, and learn how to build an image.
 Part 2. Building an image
 =========================
 
-Our goal for this part is to create our own Redis server container. The first thing we will need to do is decide which base image we want to build on. I usually pick the base image, but sometimes it is nice to start from something a little higher so that I don't have to recreate steps, and I can build on the shoulders of others.
+Our goal for this part is to create our own Redis server container. The first thing we will need to do is decide which image we want to build on. I usually pick the ubuntu image, but sometimes it is nice to start from something a little higher so that I don't have to recreate steps, and I can build on the shoulders of others.
 
 We are going to run /bin/bash with the ``-i`` and the ``-t`` flags. ``-i`` tells Docker to keep stdin open even if not attached, and ``-t`` is to allocate a pseudo-tty. Once we run the command, we will be connected into the container, and all commands at this point are running from inside the container.
 ::
 
-    $ docker run -i -t base /bin/bash
+    $ docker run -i -t ubuntu /bin/bash
     root@dda8bfc22397:/# hostname
     dda8bfc22397
     root@dda8bfc22397:/# ps aux
