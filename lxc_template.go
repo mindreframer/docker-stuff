@@ -30,6 +30,10 @@ lxc.network.ipv4 = {{.NetworkSettings.IPAddress}}/{{.NetworkSettings.IPPrefixLen
 {{$ROOTFS := .RootfsPath}}
 lxc.rootfs = {{$ROOTFS}}
 
+# enable domain name support
+lxc.mount.entry = {{.HostnamePath}} {{$ROOTFS}}/etc/hostname none bind,ro 0 0
+lxc.mount.entry = {{.HostsPath}} {{$ROOTFS}}/etc/hosts none bind,ro 0 0
+
 # use a dedicated pts for the container (and limit the number of pseudo terminal
 # available)
 lxc.pts = 1024
@@ -121,7 +125,16 @@ lxc.cgroup.cpu.shares = {{.Config.CpuShares}}
 {{end}}
 `
 
+const LxcHostConfigTemplate = `
+{{if .LxcConf}}
+{{range $pair := .LxcConf}}
+{{$pair.Key}} = {{$pair.Value}}
+{{end}}
+{{end}}
+`
+
 var LxcTemplateCompiled *template.Template
+var LxcHostConfigTemplateCompiled *template.Template
 
 func getMemorySwap(config *Config) int64 {
 	// By default, MemorySwap is set to twice the size of RAM.
@@ -138,6 +151,10 @@ func init() {
 		"getMemorySwap": getMemorySwap,
 	}
 	LxcTemplateCompiled, err = template.New("lxc").Funcs(funcMap).Parse(LxcTemplate)
+	if err != nil {
+		panic(err)
+	}
+	LxcHostConfigTemplateCompiled, err = template.New("lxc-hostconfig").Funcs(funcMap).Parse(LxcHostConfigTemplate)
 	if err != nil {
 		panic(err)
 	}

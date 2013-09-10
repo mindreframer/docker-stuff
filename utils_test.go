@@ -101,7 +101,7 @@ func mkContainer(r *Runtime, args []string, t *testing.T) (*Container, *HostConf
 	if config.Image == "_" {
 		config.Image = GetTestImage(r).ID
 	}
-	c, err := NewBuilder(r).Create(config)
+	c, err := r.Create(config)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -299,5 +299,22 @@ func TestMergeConfigPublicPortNotHonored(t *testing.T) {
 	if !contains(configUser.PortSpecs, "1111:3333") {
 		t.Logf("Expected '1111:3333' Ports: %v", configUser.PortSpecs)
 		t.Fail()
+	}
+}
+
+func TestParseLxcConfOpt(t *testing.T) {
+	opts := []string{"lxc.utsname=docker", "lxc.utsname = docker "}
+
+	for _, o := range opts {
+		k, v, err := parseLxcOpt(o)
+		if err != nil {
+			t.FailNow()
+		}
+		if k != "lxc.utsname" {
+			t.Fail()
+		}
+		if v != "docker" {
+			t.Fail()
+		}
 	}
 }

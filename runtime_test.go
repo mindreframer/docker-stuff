@@ -72,6 +72,8 @@ func layerArchive(tarfile string) (io.Reader, error) {
 }
 
 func init() {
+	os.Setenv("TEST", "1")
+
 	// Hack to run sys init during unit testing
 	if selfPath := utils.SelfPath(); selfPath == "/sbin/init" || selfPath == "/.dockerinit" {
 		SysInit()
@@ -101,7 +103,7 @@ func init() {
 	// If the unit test is not found, try to download it.
 	if img, err := globalRuntime.repositories.LookupImage(unitTestImageName); err != nil || img.ID != unitTestImageID {
 		// Retrieve the Image
-		if err := srv.ImagePull(unitTestImageName, "", os.Stdout, utils.NewStreamFormatter(false), nil, true); err != nil {
+		if err := srv.ImagePull(unitTestImageName, "", os.Stdout, utils.NewStreamFormatter(false), nil, nil, true); err != nil {
 			panic(err)
 		}
 	}
@@ -142,9 +144,7 @@ func TestRuntimeCreate(t *testing.T) {
 		t.Errorf("Expected 0 containers, %v found", len(runtime.List()))
 	}
 
-	builder := NewBuilder(runtime)
-
-	container, err := builder.Create(&Config{
+	container, err := runtime.Create(&Config{
 		Image: GetTestImage(runtime).ID,
 		Cmd:   []string{"ls", "-al"},
 	},
@@ -185,7 +185,7 @@ func TestRuntimeCreate(t *testing.T) {
 	}
 
 	// Make sure crete with bad parameters returns an error
-	_, err = builder.Create(
+	_, err = runtime.Create(
 		&Config{
 			Image: GetTestImage(runtime).ID,
 		},
@@ -194,7 +194,7 @@ func TestRuntimeCreate(t *testing.T) {
 		t.Fatal("Builder.Create should throw an error when Cmd is missing")
 	}
 
-	_, err = builder.Create(
+	_, err = runtime.Create(
 		&Config{
 			Image: GetTestImage(runtime).ID,
 			Cmd:   []string{},
@@ -208,7 +208,7 @@ func TestRuntimeCreate(t *testing.T) {
 func TestDestroy(t *testing.T) {
 	runtime := mkRuntime(t)
 	defer nuke(runtime)
-	container, err := NewBuilder(runtime).Create(&Config{
+	container, err := runtime.Create(&Config{
 		Image: GetTestImage(runtime).ID,
 		Cmd:   []string{"ls", "-al"},
 	},
@@ -294,7 +294,7 @@ func startEchoServerContainer(t *testing.T, proto string) (*Runtime, *Container,
 			t.Fatal(fmt.Errorf("Unknown protocol %v", proto))
 		}
 		t.Log("Trying port", strPort)
-		container, err = NewBuilder(runtime).Create(&Config{
+		container, err = runtime.Create(&Config{
 			Image:     GetTestImage(runtime).ID,
 			Cmd:       []string{"sh", "-c", cmd},
 			PortSpecs: []string{fmt.Sprintf("%s/%s", strPort, proto)},

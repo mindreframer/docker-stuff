@@ -11,11 +11,11 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -41,6 +41,8 @@ type Container struct {
 
 	SysInitPath    string
 	ResolvConfPath string
+	HostnamePath   string
+	HostsPath      string
 
 	cmd       *exec.Cmd
 	stdout    *utils.WriteBroadcaster
@@ -60,6 +62,7 @@ type Container struct {
 
 type Config struct {
 	Hostname        string
+	Domainname      string
 	User            string
 	Memory          int64 // Memory limit (in bytes)
 	MemorySwap      int64 // Total memory usage (memory + swap); set `-1' to disable swap
@@ -86,6 +89,7 @@ type Config struct {
 type HostConfig struct {
 	Binds           []string
 	ContainerIDFile string
+	LxcConf         []KeyValuePair
 }
 
 type BindMap struct {
@@ -98,9 +102,14 @@ var (
 	ErrInvaidWorikingDirectory = errors.New("The working directory is invalid. It needs to be an absolute path.")
 )
 
+type KeyValuePair struct {
+	Key   string
+	Value string
+}
+
 func ParseRun(args []string, capabilities *Capabilities) (*Config, *HostConfig, *flag.FlagSet, error) {
 	cmd := Subcmd("run", "[OPTIONS] IMAGE [COMMAND] [ARG...]", "Run a command in a new container")
-	if len(args) > 0 && args[0] != "--help" {
+	if os.Getenv("TEST") != "" {
 		cmd.SetOutput(ioutil.Discard)
 		cmd.Usage = nil
 	}
@@ -139,6 +148,9 @@ func ParseRun(args []string, capabilities *Capabilities) (*Config, *HostConfig, 
 
 	flVolumesFrom := cmd.String("volumes-from", "", "Mount volumes from the specified container")
 	flEntrypoint := cmd.String("entrypoint", "", "Overwrite the default entrypoint of the image")
+
+	var flLxcOpts ListOpts
+	cmd.Var(&flLxcOpts, "lxc-conf", "Add custom lxc options -lxc-conf=\"lxc.cgroup.cpuset.cpus = 0,1\"")
 
 	if err := cmd.Parse(args); err != nil {
 		return nil, nil, cmd, err
@@ -187,8 +199,23 @@ func ParseRun(args []string, capabilities *Capabilities) (*Config, *HostConfig, 
 		entrypoint = []string{*flEntrypoint}
 	}
 
+	var lxcConf []KeyValuePair
+	lxcConf, err := parseLxcConfOpts(flLxcOpts)
+	if err != nil {
+		return nil, nil, cmd, err
+	}
+
+	hostname := *flHostname
+	domainname := ""
+
+	parts := strings.SplitN(hostname, ".", 2)
+	if len(parts) > 1 {
+		hostname = parts[0]
+		domainname = parts[1]
+	}
 	config := &Config{
-		Hostname:        *flHostname,
+		Hostname:        hostname,
+		Domainname:      domainname,
 		PortSpecs:       flPorts,
 		User:            *flUser,
 		Tty:             *flTty,
@@ -212,6 +239,7 @@ func ParseRun(args []string, capabilities *Capabilities) (*Config, *HostConfig, 
 	hostConfig := &HostConfig{
 		Binds:           binds,
 		ContainerIDFile: *flContainerIDFile,
+		LxcConf:         lxcConf,
 	}
 
 	if capabilities != nil && *flMemory > 0 && !capabilities.SwapLimit {
@@ -236,17 +264,28 @@ type NetworkSettings struct {
 	PortMapping map[string]PortMapping
 }
 
-// String returns a human-readable description of the port mapping defined in the settings
-func (settings *NetworkSettings) PortMappingHuman() string {
-	var mapping []string
+// returns a more easy to process description of the port mapping defined in the settings
+func (settings *NetworkSettings) PortMappingAPI() []APIPort {
+	var mapping []APIPort
 	for private, public := range settings.PortMapping["Tcp"] {
-		mapping = append(mapping, fmt.Sprintf("%s->%s", public, private))
+		pubint, _ := strconv.ParseInt(public, 0, 0)
+		privint, _ := strconv.ParseInt(private, 0, 0)
+		mapping = append(mapping, APIPort{
+			PrivatePort: privint,
+			PublicPort:  pubint,
+			Type:        "tcp",
+		})
 	}
 	for private, public := range settings.PortMapping["Udp"] {
-		mapping = append(mapping, fmt.Sprintf("%s->%s/udp", public, private))
+		pubint, _ := strconv.ParseInt(public, 0, 0)
+		privint, _ := strconv.ParseInt(private, 0, 0)
+		mapping = append(mapping, APIPort{
+			PrivatePort: privint,
+			PublicPort:  pubint,
+			Type:        "udp",
+		})
 	}
-	sort.Strings(mapping)
-	return strings.Join(mapping, ", ")
+	return mapping
 }
 
 // Inject the io.Reader at the given path. Note: do not close the reader
@@ -315,7 +354,7 @@ func (container *Container) SaveHostConfig(hostConfig *HostConfig) (err error) {
 	return ioutil.WriteFile(container.hostConfigPath(), data, 0666)
 }
 
-func (container *Container) generateLXCConfig() error {
+func (container *Container) generateLXCConfig(hostConfig *HostConfig) error {
 	fo, err := os.Create(container.lxcConfigPath())
 	if err != nil {
 		return err
@@ -323,6 +362,11 @@ func (container *Container) generateLXCConfig() error {
 	defer fo.Close()
 	if err := LxcTemplateCompiled.Execute(fo, container); err != nil {
 		return err
+	}
+	if hostConfig != nil {
+		if err := LxcHostConfigTemplateCompiled.Execute(fo, hostConfig); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -520,7 +564,7 @@ func (container *Container) Start(hostConfig *HostConfig) error {
 	container.State.Lock()
 	defer container.State.Unlock()
 
-	if len(hostConfig.Binds) == 0 {
+	if len(hostConfig.Binds) == 0 && len(hostConfig.LxcConf) == 0 {
 		hostConfig, _ = container.ReadHostConfig()
 	}
 
@@ -645,7 +689,7 @@ func (container *Container) Start(hostConfig *HostConfig) error {
 		}
 	}
 
-	if err := container.generateLXCConfig(); err != nil {
+	if err := container.generateLXCConfig(hostConfig); err != nil {
 		return err
 	}
 
@@ -778,14 +822,44 @@ func (container *Container) allocateNetwork() error {
 		return nil
 	}
 
-	iface, err := container.runtime.networkManager.Allocate()
-	if err != nil {
-		return err
+	var iface *NetworkInterface
+	var err error
+	if !container.State.Ghost {
+		iface, err = container.runtime.networkManager.Allocate()
+		if err != nil {
+			return err
+		}
+	} else {
+		manager := container.runtime.networkManager
+		if manager.disabled {
+			iface = &NetworkInterface{disabled: true}
+		} else {
+			iface = &NetworkInterface{
+				IPNet:   net.IPNet{IP: net.ParseIP(container.NetworkSettings.IPAddress), Mask: manager.bridgeNetwork.Mask},
+				Gateway: manager.bridgeNetwork.IP,
+				manager: manager,
+			}
+			ipNum := ipToInt(iface.IPNet.IP)
+			manager.ipAllocator.inUse[ipNum] = struct{}{}
+		}
 	}
+
+	var portSpecs []string
+	if !container.State.Ghost {
+		portSpecs = container.Config.PortSpecs
+	} else {
+		for backend, frontend := range container.NetworkSettings.PortMapping["Tcp"] {
+			portSpecs = append(portSpecs, fmt.Sprintf("%s:%s/tcp", frontend, backend))
+		}
+		for backend, frontend := range container.NetworkSettings.PortMapping["Udp"] {
+			portSpecs = append(portSpecs, fmt.Sprintf("%s:%s/udp", frontend, backend))
+		}
+	}
+
 	container.NetworkSettings.PortMapping = make(map[string]PortMapping)
 	container.NetworkSettings.PortMapping["Tcp"] = make(PortMapping)
 	container.NetworkSettings.PortMapping["Udp"] = make(PortMapping)
-	for _, spec := range container.Config.PortSpecs {
+	for _, spec := range portSpecs {
 		nat, err := iface.AllocatePort(spec)
 		if err != nil {
 			iface.Release()
