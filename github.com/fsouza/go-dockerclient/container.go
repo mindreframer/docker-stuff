@@ -258,11 +258,23 @@ func (c *Client) AttachToContainer(opts AttachToContainerOptions) error {
 	return c.hijack("POST", path, raw, stdin, stderr, stdout)
 }
 
+// ExportContainer export the contents of container id as tar archive
+// and prints the exported contents to stdout.
+//
+// see http://goo.gl/Lqk0FZ for more details.
+func (c *Client) ExportContainer(id string, out io.Writer) error {
+	if id == "" {
+		return NoSuchContainer{ID: id}
+	}
+	url := fmt.Sprintf("/containers/%s/export", id)
+	return c.stream("GET", url, nil, out)
+}
+
 // NoSuchContainer is the error returned when a given container does not exist.
 type NoSuchContainer struct {
 	ID string
 }
 
-func (err *NoSuchContainer) Error() string {
+func (err NoSuchContainer) Error() string {
 	return "No such container: " + err.ID
 }
