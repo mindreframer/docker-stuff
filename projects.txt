@@ -30,3 +30,4 @@ https://github.com/swipely/docker-api.git
 https://github.com/toscanini/maestro.git
 https://github.com/jpetazzo/dind.git
 https://github.com/paulczar/docker-wordpress.git
+https://github.com/jpetazzo/pipework.git
