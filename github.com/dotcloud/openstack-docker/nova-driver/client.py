@@ -16,15 +16,12 @@
 #    under the License.
 
 import functools
-import httplib
-import json
-import random
 import socket
-import string
-import time
 
+from eventlet.green import httplib
+
+from nova.openstack.common import jsonutils
 from nova.openstack.common import log as logging
-from nova.openstack.common import timeutils
 
 
 LOG = logging.getLogger(__name__)
@@ -47,135 +44,10 @@ def filter_data(f):
             if isinstance(obj, dict):
                 for k, v in obj.items():
                     if isinstance(k, basestring):
-                        obj[k.lower()] = v
+                        obj[k.lower()] = _filter(v)
             return obj
         return _filter(out)
     return wrapper
-
-
-class MockClient(object):
-    def __init__(self, endpoint=None):
-        self._containers = {}
-
-    def _fake_id(self):
-        return ''.join(
-            random.choice(string.ascii_lowercase + string.digits)
-            for x in range(64))
-
-    def is_daemon_running(self):
-        return True
-
-    @filter_data
-    def list_containers(self, _all=True):
-        containers = []
-        for container_id, container in self._containers.iteritems():
-            containers.append({
-                'Status': 'Exit 0',
-                'Created': int(time.time()),
-                'Image': 'ubuntu:12.04',
-                'Ports': '',
-                'Command': 'bash ',
-                'Id': container_id
-            })
-        return containers
-
-    def create_container(self, args):
-        data = {
-            'Hostname': '',
-            'User': '',
-            'Memory': 0,
-            'MemorySwap': 0,
-            'AttachStdin': False,
-            'AttachStdout': False,
-            'AttachStderr': False,
-            'PortSpecs': None,
-            'Tty': True,
-            'OpenStdin': True,
-            'StdinOnce': False,
-            'Env': None,
-            'Cmd': [],
-            'Dns': None,
-            'Image': 'ubuntu',
-            'Volumes': {},
-            'VolumesFrom': ''
-        }
-        data.update(args)
-        container_id = self._fake_id()
-        self._containers[container_id] = {
-            'id': container_id,
-            'running': False,
-            'config': args
-        }
-        return container_id
-
-    def start_container(self, container_id):
-        if container_id not in self._containers:
-            return False
-        self._containers[container_id]['running'] = True
-        return True
-
-    @filter_data
-    def inspect_container(self, container_id):
-        if container_id not in self._containers:
-            return
-        container = self._containers[container_id]
-        info = {
-            'Args': [],
-            'Config': container['config'],
-            'Created': str(timeutils.utcnow()),
-            'ID': container_id,
-            'Image': self._fake_id(),
-            'NetworkSettings': {
-                'Bridge': '',
-                'Gateway': '',
-                'IPAddress': '',
-                'IPPrefixLen': 0,
-                'PortMapping': None
-            },
-            'Path': 'bash',
-            'ResolvConfPath': '/etc/resolv.conf',
-            'State': {
-                'ExitCode': 0,
-                'Ghost': False,
-                'Pid': 0,
-                'Running': container['running'],
-                'StartedAt': str(timeutils.utcnow())
-            },
-            'SysInitPath': '/tmp/docker',
-            'Volumes': {},
-        }
-        return info
-
-    def stop_container(self, container_id, timeout=None):
-        if container_id not in self._containers:
-            return False
-        self._containers[container_id]['running'] = False
-        return True
-
-    def destroy_container(self, container_id):
-        if container_id not in self._containers:
-            return False
-        del self._containers[container_id]
-        return True
-
-    def pull_repository(self, name):
-        return True
-
-    def get_container_logs(self, container_id):
-        if container_id not in self._containers:
-            return False
-        return '\n'.join([
-            'Lorem ipsum dolor sit amet, consectetur adipiscing elit. ',
-            'Vivamus ornare mi sit amet orci feugiat, nec luctus magna ',
-            'vehicula. Quisque diam nisl, dictum vitae pretium id, ',
-            'consequat eget sapien. Ut vehicula tortor non ipsum ',
-            'consectetur, at tincidunt elit posuere. In ut ligula leo. ',
-            'Donec eleifend accumsan mi, in accumsan metus. Nullam nec ',
-            'nulla eu risus vehicula porttitor. Sed purus ligula, ',
-            'placerat nec metus a, imperdiet viverra turpis. Praesent ',
-            'dapibus ornare massa. Nam ut hendrerit nunc. Interdum et ',
-            'malesuada fames ac ante ipsum primis in faucibus. ',
-            'Fusce nec pellentesque nisl.'])
 
 
 class Response(object):
@@ -193,15 +65,15 @@ class Response(object):
         if self._response.getheader('Content-Type') != 'application/json':
             return
         try:
-            return json.loads(self.data)
+            return jsonutils.loads(self.data)
         except ValueError:
             return
 
 
 class UnixHTTPConnection(httplib.HTTPConnection):
-    def __init__(self, unix_socket):
+    def __init__(self):
         httplib.HTTPConnection.__init__(self, 'localhost')
-        self.unix_socket = unix_socket
+        self.unix_socket = '/var/run/docker.sock'
 
     def connect(self):
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -210,27 +82,31 @@ class UnixHTTPConnection(httplib.HTTPConnection):
 
 
 class DockerHTTPClient(object):
-    def __init__(self, unix_socket=None):
-        if unix_socket is None:
-            unix_socket = '/var/run/docker.sock'
-        self._unix_socket = unix_socket
+    def __init__(self, connection=None):
+        self._connection = connection
 
-    def is_daemon_running(self):
-        try:
-            self.list_containers()
-            return True
-        except socket.error:
-            return False
+    @property
+    def connection(self):
+        if self._connection:
+            return self._connection
+        else:
+            return UnixHTTPConnection()
 
     def make_request(self, *args, **kwargs):
-        conn = UnixHTTPConnection(self._unix_socket)
+        headers = {}
+        if 'headers' in kwargs and kwargs['headers']:
+            headers = kwargs['headers']
+        if 'Content-Type' not in headers:
+            headers['Content-Type'] = 'application/json'
+            kwargs['headers'] = headers
+        conn = self.connection
         conn.request(*args, **kwargs)
         return Response(conn.getresponse())
 
     def list_containers(self, _all=True):
         resp = self.make_request(
             'GET',
-            '/v1.3/containers/ps?all={0}&limit=50'.format(int(_all)))
+            '/v1.4/containers/ps?all={0}&limit=50'.format(int(_all)))
         return resp.json
 
     def create_container(self, args):
@@ -242,26 +118,25 @@ class DockerHTTPClient(object):
             'AttachStdin': False,
             'AttachStdout': False,
             'AttachStderr': False,
-            'PortSpecs': None,
+            'PortSpecs': [],
             'Tty': True,
             'OpenStdin': True,
             'StdinOnce': False,
             'Env': None,
             'Cmd': [],
             'Dns': None,
-            'Image': 'ubuntu',
+            'Image': None,
             'Volumes': {},
-            'VolumesFrom': ''
+            'VolumesFrom': '',
         }
         data.update(args)
         resp = self.make_request(
             'POST',
-            '/v1.3/containers/create',
-            body=json.dumps(data),
-            headers={'Content-Type': 'application/json'})
+            '/v1.4/containers/create',
+            body=jsonutils.dumps(data))
         if resp.code != 201:
             return
-        obj = json.loads(resp.data)
+        obj = jsonutils.loads(resp.data)
         for k, v in obj.iteritems():
             if k.lower() == 'id':
                 return v
@@ -269,35 +144,45 @@ class DockerHTTPClient(object):
     def start_container(self, container_id):
         resp = self.make_request(
             'POST',
-            '/v1.3/containers/{0}/start'.format(container_id))
+            '/v1.4/containers/{0}/start'.format(container_id),
+            body='{}')
         return (resp.code == 200)
 
-    def inspect_container(self, container_id):
+    def inspect_image(self, image_name):
         resp = self.make_request(
             'GET',
-            '/v1.3/containers/{0}/json'.format(container_id))
+            '/v1.4/images/{0}/json'.format(image_name))
         if resp.code != 200:
             return
         return resp.json
 
-    def stop_container(self, container_id, timeout=None):
-        if timeout is None:
-            timeout = 5
+    def inspect_container(self, container_id):
+        resp = self.make_request(
+            'GET',
+            '/v1.4/containers/{0}/json'.format(container_id))
+        if resp.code != 200:
+            return
+        return resp.json
+
+    def stop_container(self, container_id):
+        timeout = 5
         resp = self.make_request(
             'POST',
-            '/v1.3/containers/{0}/stop?t={1}'.format(container_id, timeout))
+            '/v1.4/containers/{0}/stop?t={1}'.format(container_id, timeout))
         return (resp.code == 204)
 
     def destroy_container(self, container_id):
         resp = self.make_request(
             'DELETE',
-            '/v1.3/containers/{0}'.format(container_id))
+            '/v1.4/containers/{0}'.format(container_id))
         return (resp.code == 204)
 
     def pull_repository(self, name):
-        resp = self.make_request(
-            'POST',
-            '/v1.3/images/create?fromImage={0}'.format(name))
+        parts = name.rsplit(':', 1)
+        url = '/v1.4/images/create?fromImage={0}'.format(parts[0])
+        if len(parts) > 1:
+            url += '&tag={0}'.format(parts[1])
+        resp = self.make_request('POST', url)
         while True:
             buf = resp.read(1024)
             if not buf:
@@ -305,10 +190,33 @@ class DockerHTTPClient(object):
                 break
         return (resp.code == 200)
 
+    def push_repository(self, name, headers=None):
+        url = '/v1.4/images/{0}/push'.format(name)
+        # NOTE(samalba): docker requires the credentials fields even if
+        # they're not needed here.
+        body = ('{"username":"foo","password":"bar",'
+                '"auth":"","email":"foo@bar.bar"}')
+        resp = self.make_request('POST', url, headers=headers, body=body)
+        while True:
+            buf = resp.read(1024)
+            if not buf:
+                # Image push completed
+                break
+        return (resp.code == 200)
+
+    def commit_container(self, container_id, name):
+        parts = name.rsplit(':', 1)
+        url = '/v1.4/commit?container={0}&repo={1}'.format(container_id,
+                                                           parts[0])
+        if len(parts) > 1:
+            url += '&tag={0}'.format(parts[1])
+        resp = self.make_request('POST', url)
+        return (resp.code == 201)
+
     def get_container_logs(self, container_id):
         resp = self.make_request(
             'POST',
-            ('/v1.3/containers/{0}/attach'
+            ('/v1.4/containers/{0}/attach'
              '?logs=1&stream=0&stdout=1&stderr=1').format(container_id))
         if resp.code != 200:
             return

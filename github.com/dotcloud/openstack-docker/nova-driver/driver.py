@@ -19,7 +19,6 @@
 A Docker Hypervisor which allows running Linux Containers instead of VMs.
 """
 
-import base64
 import os
 import random
 import socket
@@ -28,56 +27,75 @@ import time
 from oslo.config import cfg
 
 from nova.compute import power_state
+from nova.compute import task_states
 from nova import exception
+from nova.image import glance
+from nova.openstack.common.gettextutils import _
+from nova.openstack.common import jsonutils
 from nova.openstack.common import log
 from nova import utils
-from nova.virt.docker import client
+import nova.virt.docker.client
 from nova.virt.docker import hostinfo
 from nova.virt import driver
 
 
+docker_opts = [
+    cfg.IntOpt('docker_registry_default_port',
+               default=5042,
+               help=_('Default TCP port to find the '
+                      'docker-registry container')),
+]
+
 CONF = cfg.CONF
-CONF.import_opt('host', 'nova.netconf')
+CONF.register_opts(docker_opts)
+CONF.import_opt('my_ip', 'nova.netconf')
 
 LOG = log.getLogger(__name__)
 
 
 class DockerDriver(driver.ComputeDriver):
+    """Docker hypervisor driver."""
+
     capabilities = {
         'has_imagecache': True,
         'supports_recreate': True,
     }
 
-    """Docker hypervisor driver."""
-
-    def __init__(self, virtapi, read_only=False):
+    def __init__(self, virtapi):
         super(DockerDriver, self).__init__(virtapi)
-        self.docker = client.DockerHTTPClient()
-        self.virtapi = virtapi
-        self.fake = False
+        self._docker = None
 
-    def use_mock_client(self):
-        """Replace HTTP Client with the Mock one (useful for unit tests)."""
-        self.docker = client.MockClient()
-        self.fake = True
+    @property
+    def docker(self):
+        if self._docker is None:
+            self._docker = nova.virt.docker.client.DockerHTTPClient()
+        return self._docker
 
     def init_host(self, host):
-        if self.docker.is_daemon_running() is False:
-            raise exception.NovaException("Docker daemon is not running or is "
-                    "not reachable (check the rights on /var/run/docker.sock)")
+        if self.is_daemon_running() is False:
+            raise exception.NovaException(_('Docker daemon is not running or '
+                'is not reachable (check the rights on /var/run/docker.sock)'))
 
-    def list_instances(self, _inspect=False):
+    def is_daemon_running(self):
+        try:
+            self.docker.list_containers()
+            return True
+        except socket.error:
+            # NOTE(samalba): If the daemon is not running, we'll get a socket
+            # error. The list_containers call is safe to call often, there
+            # is an internal hard limit in docker if the amount of containers
+            # is huge.
+            return False
+
+    def list_instances(self, inspect=False):
         res = []
         for container in self.docker.list_containers():
             info = self.docker.inspect_container(container['id'])
-            if _inspect:
+            if inspect:
                 res.append(info)
             else:
                 res.append(info['Config'].get('Hostname'))
         return res
-
-    def legacy_nwinfo(self):
-        return True
 
     def plug_vifs(self, instance, network_info):
         """Plug VIFs into networks."""
@@ -88,7 +106,7 @@ class DockerDriver(driver.ComputeDriver):
         pass
 
     def find_container_by_name(self, name):
-        for info in self.list_instances(_inspect=True):
+        for info in self.list_instances(inspect=True):
             if info['Config'].get('Hostname') == name:
                 return info
         return {}
@@ -132,7 +150,11 @@ class DockerDriver(driver.ComputeDriver):
             'hypervisor_type': 'docker',
             'hypervisor_version': '1.0',
             'hypervisor_hostname': nodename,
-            'cpu_info': '?'
+            'cpu_info': '?',
+            'supported_instances': jsonutils.dumps([
+                    ('i686', 'docker', 'lxc'),
+                    ('x86_64', 'docker', 'lxc')
+                ])
         }
         return stats
 
@@ -147,6 +169,10 @@ class DockerDriver(driver.ComputeDriver):
         tasks_path = os.path.join(lxc_path, container_id, 'tasks')
         n = 0
         while True:
+            # NOTE(samalba): We wait for the process to be spawned inside the
+            # container in order to get the the "container pid". This is
+            # usually really fast. To avoid race conditions on a slow
+            # machine, we allow 10 seconds as a hard limit.
             if n > 20:
                 return
             try:
@@ -159,22 +185,27 @@ class DockerDriver(driver.ComputeDriver):
             time.sleep(0.5)
             n += 1
 
+    def _find_fixed_ip(self, subnets):
+        for subnet in subnets:
+            for ip in subnet['ips']:
+                if ip['type'] == 'fixed' and ip['address']:
+                    return ip['address']
+
     def _setup_network(self, instance, network_info):
-        if self.fake is True or not network_info:
+        if not network_info:
             return
         container_id = self.find_container_by_name(instance['name']).get('id')
         if not container_id:
             return
-        network_info = network_info[0]
+        network_info = network_info[0]['network']
         netns_path = '/var/run/netns'
         if not os.path.exists(netns_path):
             utils.execute(
                 'mkdir', '-p', netns_path, run_as_root=True)
         nspid = self._find_container_pid(container_id)
         if not nspid:
-            raise RuntimeError(
-                'Cannot find any PID under '
-                'container "{0}"'.format(container_id))
+            msg = _('Cannot find any PID under container "{0}"')
+            raise RuntimeError(msg.format(container_id))
         netns_path = os.path.join(netns_path, container_id)
         utils.execute(
             'ln', '-sf', '/proc/{0}/ns/net'.format(nspid),
@@ -183,84 +214,96 @@ class DockerDriver(driver.ComputeDriver):
         rand = random.randint(0, 100000)
         if_local_name = 'pvnetl{0}'.format(rand)
         if_remote_name = 'pvnetr{0}'.format(rand)
-        bridge = network_info[0]['bridge']
-        ip = network_info[1]['ips'][0]['ip']
-        utils.execute(
-            'ip', 'link', 'add', 'name', if_local_name, 'type',
-            'veth', 'peer', 'name', if_remote_name,
-            run_as_root=True)
-        utils.execute(
-            'brctl', 'addif', bridge, if_local_name,
-            run_as_root=True)
-        utils.execute(
-            'ip', 'link', 'set', if_local_name, 'up',
-            run_as_root=True)
-        utils.execute(
-            'ip', 'link', 'set', if_remote_name, 'netns', nspid,
-            run_as_root=True)
-        utils.execute(
-            'ip', 'netns', 'exec', container_id, 'ifconfig',
-            if_remote_name, ip,
-            run_as_root=True)
-
-    def _parse_user_data(self, user_data):
-        data = {}
-        user_data = base64.b64decode(user_data)
-        for ln in user_data.split('\n'):
-            ln = ln.strip()
-            if not ln or ':' not in ln:
-                continue
-            if ln.startswith('#'):
-                continue
-            ln = ln.split(':', 1)
-            data[ln[0].strip()] = ln[1].strip('"\' ')
-        return data
+        bridge = network_info['bridge']
+        ip = self._find_fixed_ip(network_info['subnets'])
+        if not ip:
+            raise RuntimeError(_('Cannot set fixed ip'))
+        undo_mgr = utils.UndoManager()
+        try:
+            utils.execute(
+                'ip', 'link', 'add', 'name', if_local_name, 'type',
+                'veth', 'peer', 'name', if_remote_name,
+                run_as_root=True)
+            undo_mgr.undo_with(lambda: utils.execute(
+                'ip', 'link', 'delete', if_local_name, run_as_root=True))
+            # NOTE(samalba): Deleting the interface will delete all associated
+            # resources (remove from the bridge, its pair, etc...)
+            utils.execute(
+                'brctl', 'addif', bridge, if_local_name,
+                run_as_root=True)
+            utils.execute(
+                'ip', 'link', 'set', if_local_name, 'up',
+                run_as_root=True)
+            utils.execute(
+                'ip', 'link', 'set', if_remote_name, 'netns', nspid,
+                run_as_root=True)
+            utils.execute(
+                'ip', 'netns', 'exec', container_id, 'ifconfig',
+                if_remote_name, ip,
+                run_as_root=True)
+        except Exception:
+            msg = _('Failed to setup the network, rolling back')
+            undo_mgr.rollback_and_reraise(msg=msg, instance=instance)
 
     def _get_memory_limit_bytes(self, instance):
         for metadata in instance.get('system_metadata', []):
-            if not metadata['deleted'] and \
-                    metadata['key'] == 'instance_type_memory_mb':
-                        return int(metadata['value']) * 1024 * 1024
+            if metadata['deleted']:
+                continue
+            if metadata['key'] == 'instance_type_memory_mb':
+                return int(metadata['value']) * 1024 * 1024
         return 0
+
+    def _get_image_name(self, context, instance, image):
+        fmt = image['container_format']
+        if fmt != 'docker':
+            msg = _('Image container format not supported ({0})')
+            raise exception.InstanceDeployFailure(msg.format(fmt),
+                instance_id=instance['name'])
+        registry_port = self._get_registry_port()
+        return '{0}:{1}/{2}'.format(CONF.my_ip,
+                                    registry_port,
+                                    image['name'])
+
+    def _get_default_cmd(self, image_name):
+        default_cmd = ['sh']
+        info = self.docker.inspect_image(image_name)
+        if not info:
+            return default_cmd
+        if not info['container_config']['Cmd']:
+            return default_cmd
 
     def spawn(self, context, instance, image_meta, injected_files,
               admin_password, network_info=None, block_device_info=None):
-        cmd = ['/bin/sh']
-        user_data = instance.get('user_data')
-        image_name = 'ubuntu'
-        if user_data:
-            user_data = self._parse_user_data(user_data)
-            if 'cmd' in user_data:
-                cmd = ['/bin/sh', '-c', user_data.get('cmd')]
-            if 'image' in user_data:
-                image_name = user_data.get('image')
+        image_name = self._get_image_name(context, instance, image_meta)
         args = {
             'Hostname': instance['name'],
             'Image': image_name,
-            'Cmd': cmd,
             'Memory': self._get_memory_limit_bytes(instance)
         }
+        default_cmd = self._get_default_cmd(image_name)
+        if default_cmd:
+            args['Cmd'] = default_cmd
         container_id = self.docker.create_container(args)
-        if container_id is None:
-            LOG.info('Image name "{0}" does not exist, fetching it...'.format(
-                image_name))
+        if not container_id:
+            msg = _('Image name "{0}" does not exist, fetching it...')
+            LOG.info(msg.format(image_name))
             res = self.docker.pull_repository(image_name)
             if res is False:
                 raise exception.InstanceDeployFailure(
-                    'Cannot pull missing image',
+                    _('Cannot pull missing image'),
                     instance_id=instance['name'])
             container_id = self.docker.create_container(args)
-            if container_id is None:
+            if not container_id:
                 raise exception.InstanceDeployFailure(
-                    'Cannot create container',
+                    _('Cannot create container'),
                     instance_id=instance['name'])
         self.docker.start_container(container_id)
         try:
             self._setup_network(instance, network_info)
         except Exception as e:
-            raise exception.InstanceDeployFailure(
-                'Cannot setup network: {0}'.format(e),
-                instance_id=instance['name'])
+            msg = _('Cannot setup network: {0}')
+            raise exception.InstanceDeployFailure(msg.format(e),
+                                                  instance_id=instance['name'])
 
     def destroy(self, instance, network_info, block_device_info=None,
                 destroy_disks=True):
@@ -275,8 +318,12 @@ class DockerDriver(driver.ComputeDriver):
         container_id = self.find_container_by_name(instance['name']).get('id')
         if not container_id:
             return
-        self.docker.stop_container(container_id)
-        self.docker.start_container(container_id)
+        if not self.docker.stop_container(container_id):
+            LOG.warning(_('Cannot stop the container, '
+                          'please check docker logs'))
+        if not self.docker.start_container(container_id):
+            LOG.warning(_('Cannot restart the container, '
+                          'please check docker logs'))
 
     def power_on(self, context, instance, network_info, block_device_info):
         container_id = self.find_container_by_name(instance['name']).get('id')
@@ -295,3 +342,43 @@ class DockerDriver(driver.ComputeDriver):
         if not container_id:
             return
         return self.docker.get_container_logs(container_id)
+
+    def _get_registry_port(self):
+        default_port = CONF.docker_registry_default_port
+        registry = None
+        for container in self.docker.list_containers(_all=False):
+            container = self.docker.inspect_container(container['id'])
+            if 'docker-registry' in container['Path']:
+                registry = container
+                break
+        if not registry:
+            return default_port
+        # NOTE(samalba): The registry service always binds on port 5000 in the
+        # container
+        try:
+            return container['NetworkSettings']['PortMapping']['Tcp']['5000']
+        except (KeyError, TypeError):
+            # NOTE(samalba): Falling back to a default port allows more
+            # flexibility (run docker-registry outside a container)
+            return default_port
+
+    def snapshot(self, context, instance, image_href, update_task_state):
+        container_id = self.find_container_by_name(instance['name']).get('id')
+        if not container_id:
+            raise exception.InstanceNotRunning(instance_id=instance['uuid'])
+        update_task_state(task_state=task_states.IMAGE_PENDING_UPLOAD)
+        (image_service, image_id) = glance.get_remote_image_service(
+            context, image_href)
+        image = image_service.show(context, image_id)
+        registry_port = self._get_registry_port()
+        name = image['name']
+        default_tag = (':' not in name)
+        name = '{0}:{1}/{2}'.format(CONF.my_ip,
+                                    registry_port,
+                                    name)
+        commit_name = name if not default_tag else name + ':latest'
+        self.docker.commit_container(container_id, commit_name)
+        update_task_state(task_state=task_states.IMAGE_UPLOADING,
+                          expected_state=task_states.IMAGE_PENDING_UPLOAD)
+        headers = {'X-Meta-Glance-Image-Id': image_href}
+        self.docker.push_repository(name, headers=headers)
