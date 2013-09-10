@@ -1,13 +1,15 @@
 
-import os
-from cStringIO import StringIO
-import json
+import cStringIO as StringIO
 import hashlib
+import json
+import os
 import requests
+
 import base
+import checksums
 import config
 import storage
-from checksums import compute_simple
+
 
 cfg = config.load()
 
@@ -24,7 +26,7 @@ class TestWorkflow(base.TestCase):
 
     def generate_chunk(self, data):
         bufsize = 1024
-        io = StringIO(data)
+        io = StringIO.StringIO(data)
         while True:
             buf = io.read(bufsize)
             if not buf:
@@ -106,7 +108,7 @@ class TestWorkflow(base.TestCase):
         return (namespace, repos)
 
     def fetch_image(self, image_id):
-        '''Return image json metadata, checksum and its blob'''
+        """Return image json metadata, checksum and its blob."""
         resp = requests.get('{0}/v1/images/{1}/json'.format(
             self.registry_endpoint, image_id),
             cookies=self.cookies)
@@ -150,10 +152,10 @@ class TestWorkflow(base.TestCase):
             json_data, checksum, blob = self.fetch_image(image_id)
             # check queried checksum and local computed checksum from the image
             # are the same
-            tmpfile = StringIO()
+            tmpfile = StringIO.StringIO()
             tmpfile.write(blob)
             tmpfile.seek(0)
-            computed_checksum = compute_simple(tmpfile, json_data)
+            computed_checksum = checksums.compute_simple(tmpfile, json_data)
             tmpfile.close()
             self.assertEqual(checksum, computed_checksum)
         # Remove image tags

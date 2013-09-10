@@ -1,6 +1,6 @@
 
-import tempfile
 import contextlib
+import tempfile
 
 import config
 
@@ -10,7 +10,7 @@ __all__ = ['load']
 
 class Storage(object):
 
-    """ Storage is organized as follow:
+    """Storage is organized as follow:
     $ROOT/images/<image_id>/json
     $ROOT/images/<image_id>/layer
     $ROOT/repositories/<namespace>/<repository_name>/<tag_name>
@@ -23,6 +23,7 @@ class Storage(object):
     # Set the IO buffer to 64kB
     buffer_size = 64 * 1024
 
+    #FIXME(samalba): Move all path resolver in each module (out of the base)
     def images_list_path(self, namespace, repository):
         return '{0}/{1}/{2}/_images_list'.format(self.repositories,
                                                  namespace,
@@ -85,7 +86,7 @@ class Storage(object):
 
 @contextlib.contextmanager
 def store_stream(stream):
-    """ Stores the entire stream to a temporary file """
+    """Stores the entire stream to a temporary file."""
     tmpf = tempfile.TemporaryFile()
     while True:
         try:
@@ -100,15 +101,28 @@ def store_stream(stream):
     tmpf.close()
 
 
-from s3 import S3Storage
+def temp_store_handler():
+    tmpf = tempfile.TemporaryFile()
+
+    def fn(buf):
+        try:
+            tmpf.write(buf)
+        except IOError:
+            pass
+
+    return tmpf, fn
+
+
+from glance import GlanceStorage
 from local import LocalStorage
+from s3 import S3Storage
 
 
 _storage = {}
 
 
 def load(kind=None):
-    """ Returns the right storage class according to the configuration """
+    """Returns the right storage class according to the configuration."""
     global _storage
     cfg = config.load()
     if not kind:
@@ -119,6 +133,8 @@ def load(kind=None):
         store = S3Storage(cfg)
     elif kind == 'local':
         store = LocalStorage(cfg)
+    elif kind == 'glance':
+        store = GlanceStorage(cfg)
     else:
         raise ValueError('Not supported storage \'{0}\''.format(kind))
     _storage[kind] = store
