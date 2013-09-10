@@ -13,10 +13,11 @@ Tsuru is an open source polyglot cloud application platform (paas). With tsuru, 
 
 Learn more in :doc:`Tsuru's Overview </overview>` or check out our :doc:`FAQ </faq>`.
 
-* :doc:`Build your own PaaS with Tsuru </build>`
+* `Build your own PaaS with Tsuru <http://docs.tsuru.io/en/latest/#for-tsuru-ops>`_
 * :doc:`Deploy your application on Tsuru </apps/quickstart>`
     * :doc:`python/django </apps/quickstart/python>`
     * :doc:`ruby/rails </apps/quickstart/ruby>`
+    * :doc:`php </apps/quickstart/php>`
 * :doc:`Provide services on Tsuru </services/build>`
 
 More documentation
@@ -31,12 +32,14 @@ For tsuru users
 * :doc:`building your application </apps/quickstart>`
     * :doc:`python/django </apps/quickstart/python>`
     * :doc:`ruby/rails </apps/quickstart/ruby>`
+    * :doc:`php </apps/quickstart/php>`
 
 For tsuru ops
 +++++++++++++
 
 * :doc:`build your own PaaS using juju </build>`
 * :doc:`build your own PaaS using docker </docker>`
+* :doc:`build your own PaaS using docker on centos </docker-centos>`
 * :doc:`tsuru configuration </config>`
 * :doc:`backing up tsuru </server/backup>`
 * :doc:`tsuru api reference </api>`

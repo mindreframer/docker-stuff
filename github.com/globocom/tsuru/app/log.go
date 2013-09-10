@@ -6,6 +6,8 @@ package app
 
 import (
 	"errors"
+	"github.com/globocom/tsuru/db"
+	"labix.org/v2/mgo/bson"
 	"sync"
 	"sync/atomic"
 )
@@ -25,6 +27,7 @@ var listeners = struct {
 type LogListener struct {
 	C       <-chan Applog
 	c       chan Applog
+	quit    chan byte
 	state   int32
 	appname string
 }
@@ -32,6 +35,7 @@ type LogListener struct {
 func NewLogListener(a *App) *LogListener {
 	c := make(chan Applog, 10)
 	l := LogListener{C: c, c: c, state: open, appname: a.Name}
+	l.quit = make(chan byte)
 	listeners.Lock()
 	list := listeners.m[l.appname]
 	list = append(list, &l)
@@ -44,9 +48,10 @@ func (l *LogListener) Close() error {
 	if !atomic.CompareAndSwapInt32(&l.state, open, closed) {
 		return errors.New("Already closed.")
 	}
-	close(l.c)
 	listeners.Lock()
 	defer listeners.Unlock()
+	close(l.quit)
+	close(l.c)
 	list := listeners.m[l.appname]
 	index := -1
 	for i, listener := range list {
@@ -65,16 +70,36 @@ func (l *LogListener) Close() error {
 func notify(appName string, messages []interface{}) {
 	var wg sync.WaitGroup
 	listeners.RLock()
-	ls := listeners.m[appName]
+	ls := make([]*LogListener, len(listeners.m[appName]))
+	copy(ls, listeners.m[appName])
 	listeners.RUnlock()
 	for _, l := range ls {
 		wg.Add(1)
 		go func(l *LogListener) {
 			for _, msg := range messages {
-				l.c <- msg.(Applog)
+				select {
+				case <-l.quit:
+					return
+				default:
+					l.c <- msg.(Applog)
+				}
 			}
 			wg.Done()
 		}(l)
 	}
 	wg.Wait()
+}
+
+// LogRemove removes the app log.
+func LogRemove(a *App) error {
+	conn, err := db.Conn()
+	if err != nil {
+		return err
+	}
+	if a != nil {
+		_, err = conn.Logs().RemoveAll(bson.M{"appname": a.Name})
+	} else {
+		_, err = conn.Logs().RemoveAll(nil)
+	}
+	return err
 }

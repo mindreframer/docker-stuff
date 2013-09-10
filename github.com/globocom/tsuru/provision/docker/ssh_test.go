@@ -34,7 +34,7 @@ func (SSHSuite) TestExecuteCommandHandler(c *gocheck.C) {
 	c.Assert(recorder.Body.String(), gocheck.Equals, string(output))
 	c.Assert(recorder.Header().Get("Content-Type"), gocheck.Equals, "text")
 	args := []string{
-		"10.10.10.10", "-l", "ubuntu",
+		"10.10.10.10", "-l", "ubuntu", "-q",
 		"-o", "StrictHostKeyChecking no",
 		"--", "ls", "-l", "-a",
 	}
