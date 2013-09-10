@@ -1,0 +1,14 @@
+# Git Ignore
+
+# Examples
+#
+#   node_modules/
+#   /.tmp-file-*
+#   /tmp-dir/*
+#   /symlink*
+#
+docker-vmi-temp/
+sources/
+docker-vmi-iso.iso
+docker-vmi-img.img
+ubuntu-12.04.2-server-amd64.iso
