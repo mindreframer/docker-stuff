@@ -57,6 +57,10 @@ Articles:
       A web interface for docker. http://docker.io
        72 commits, last change: 2013-09-02 20:35:51, 818 stars, 37 forks
 
+    cvlc/orchestrator:
+      IPv6 Tethered Instances
+       33 commits, last change: 2013-09-06 11:39:46, 2 stars, 0 forks
+
     dotcloud/docker-registry:
       Registry server for Docker (hosting/delivering of repositories and images)
        212 commits, last change: 2013-09-09 16:03:48, 133 stars, 56 forks
