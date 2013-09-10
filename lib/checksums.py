@@ -1,6 +1,6 @@
 
-import logging
 import hashlib
+import logging
 import tarfile
 
 
@@ -28,7 +28,7 @@ def compute_tarsum(fp, json_data):
     header_fields = ('name', 'mode', 'uid', 'gid', 'size', 'mtime',
                      'type', 'linkname', 'uname', 'gname', 'devmajor',
                      'devminor')
-    tar = tarfile.open(mode='r:*', fileobj=fp)
+    tar = tarfile.open(mode='r|*', fileobj=fp)
     hashes = []
     for member in tar:
         header = ''
@@ -50,19 +50,27 @@ def compute_tarsum(fp, json_data):
         except KeyError:
             h = sha256_string(header)
         hashes.append(h)
-        log = '\n+ filename: {0}\n'.format(member.name)
-        log += '+ header: {0}\n'.format(header)
-        log += '+ hash: {0}\n'.format(h)
-        log += '*' * 16
-        logger.debug('checksums.compute_tarsum: \n{0}'.format(log))
+        #log = '\n+ filename: {0}\n'.format(member.name)
+        #log += '+ header: {0}\n'.format(header)
+        #log += '+ hash: {0}\n'.format(h)
+        #log += '*' * 16
+        #logger.debug('checksums.compute_tarsum: \n{0}'.format(log))
     tar.close()
     hashes.sort()
     data = json_data + ''.join(hashes)
-    logger.debug('checksums.compute_tarsum: '
-                 'Hashes: \n{0}\n{1}'.format('\n'.join(hashes), '-' * 16))
+    #logger.debug('checksums.compute_tarsum: '
+    #             'Hashes: \n{0}\n{1}'.format('\n'.join(hashes), '-' * 16))
     tarsum = 'tarsum+sha256:{0}'.format(sha256_string(data))
     logger.debug('checksums.compute_tarsum: return {0}'.format(tarsum))
     return tarsum
+
+
+def simple_checksum_handler(json_data):
+    h = hashlib.sha256(json_data + '\n')
+
+    def fn(buf):
+        h.update(buf)
+    return h, fn
 
 
 def compute_simple(fp, json_data):

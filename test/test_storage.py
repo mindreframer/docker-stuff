@@ -1,5 +1,5 @@
 
-from cStringIO import StringIO
+import cStringIO as StringIO
 
 import base
 import storage
@@ -32,7 +32,7 @@ class TestLocalStorage(base.TestCase):
         # test 7MB
         content = self.gen_random_string(7 * 1024 * 1024)
         # test exists
-        io = StringIO(content)
+        io = StringIO.StringIO(content)
         self.assertFalse(self._storage.exists(filename))
         self._storage.stream_write(filename, io)
         io.close()
@@ -52,9 +52,3 @@ class TestLocalStorage(base.TestCase):
         iterator = self._storage.list_directory(notexist)
         self.assertRaises(OSError, next, iterator)
         self.assertRaises(OSError, self._storage.get_size, notexist)
-
-
-class TestS3Storage(TestLocalStorage):
-
-    def setUp(self):
-        self._storage = storage.load('s3')

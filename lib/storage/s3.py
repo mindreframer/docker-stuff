@@ -1,9 +1,11 @@
 
+import cStringIO as StringIO
 import os
-from cStringIO import StringIO
 
 import boto.s3.connection
 import boto.s3.key
+
+import cache
 
 from . import Storage
 
@@ -20,7 +22,7 @@ class S3Storage(Storage):
         self._root_path = self._config.storage_path
 
     def _debug_key(self, key):
-        """ Used for debugging only """
+        """Used for debugging only."""
         orig_meth = key.bucket.connection.make_request
 
         def new_meth(*args, **kwargs):
@@ -37,6 +39,7 @@ class S3Storage(Storage):
             return path[1:]
         return path
 
+    @cache.get
     def get_content(self, path):
         path = self._init_path(path)
         key = boto.s3.key.Key(self._s3_bucket, path)
@@ -44,6 +47,7 @@ class S3Storage(Storage):
             raise IOError('No such key: \'{0}\''.format(path))
         return key.get_contents_as_string()
 
+    @cache.put
     def put_content(self, path, content):
         path = self._init_path(path)
         key = boto.s3.key.Key(self._s3_bucket, path)
@@ -74,7 +78,7 @@ class S3Storage(Storage):
                 buf = fp.read(buffer_size)
                 if not buf:
                     break
-                io = StringIO(buf)
+                io = StringIO.StringIO(buf)
                 mp.upload_part_from_file(io, num_part)
                 num_part += 1
                 io.close()
@@ -107,6 +111,7 @@ class S3Storage(Storage):
         key = boto.s3.key.Key(self._s3_bucket, path)
         return key.exists()
 
+    @cache.remove
     def remove(self, path):
         path = self._init_path(path)
         key = boto.s3.key.Key(self._s3_bucket, path)
