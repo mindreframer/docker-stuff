@@ -33,7 +33,11 @@ Running an interactive shell
 
   # Run an interactive shell in the ubuntu image,
   # allocate a tty, attach stdin and stdout
+  # To detach the tty without exiting the shell,
+  # use the escape sequence Ctrl-p + Ctrl-q
   sudo docker run -i -t ubuntu /bin/bash
+
+.. _dockergroup:
 
 Why ``sudo``?
 -------------
@@ -41,7 +45,7 @@ Why ``sudo``?
 The ``docker`` daemon always runs as root, and since ``docker``
 version 0.5.2, ``docker`` binds to a Unix socket instead of a TCP
 port. By default that Unix socket is owned by the user *root*, and so,
-by default, you can access it with ``sudo``. 
+by default, you can access it with ``sudo``.
 
 Starting in version 0.5.3, if you create a Unix group called *docker*
 and add users to it, then the ``docker`` daemon will make the
@@ -56,6 +60,8 @@ you don't need to add ``sudo`` to all the client commands.
   sudo groupadd docker
 
   # Add the ubuntu user to the docker group
+  # You may have to logout and log back in again for
+  # this to take effect
   sudo gpasswd -a ubuntu docker
 
   # Restart the docker daemon
@@ -136,7 +142,7 @@ Expose a service on a TCP port
 .. code-block:: bash
 
   # Expose port 4444 of this container, and tell netcat to listen on it
-  JOB=$(sudo docker run -d -p 4444 ubuntu /bin/nc -l -p 4444)
+  JOB=$(sudo docker run -d -p 4444 ubuntu:12.10 /bin/nc -l -p 4444)
 
   # Which public port is NATed to my container?
   PORT=$(sudo docker port $JOB 4444)

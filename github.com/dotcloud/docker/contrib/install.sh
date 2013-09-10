@@ -35,10 +35,10 @@ else
     fi
 fi
 
-echo "Downloading docker binary and uncompressing into /usr/local/bin..."
-curl -s https://get.docker.io/builds/$(uname -s)/$(uname -m)/docker-latest.tgz |
-tar -C /usr/local/bin --strip-components=1 -zxf- \
-docker-latest/docker
+echo "Downloading docker binary to /usr/local/bin..."
+curl -s https://get.docker.io/builds/$(uname -s)/$(uname -m)/docker-latest \
+    > /usr/local/bin/docker
+chmod +x /usr/local/bin/docker
 
 if [ -f /etc/init/dockerd.conf ]
 then
@@ -47,10 +47,10 @@ else
   echo "Creating /etc/init/dockerd.conf..."
   cat >/etc/init/dockerd.conf <<EOF
 description "Docker daemon"
-start on filesystem or runlevel [2345]
+start on filesystem and started lxc-net
 stop on runlevel [!2345]
 respawn
-exec env LANG="en_US.UTF-8" /usr/local/bin/docker -d
+exec /usr/local/bin/docker -d
 EOF
 fi
 

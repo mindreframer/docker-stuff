@@ -4,13 +4,13 @@
 
 .. _dockerbuilder:
 
-==================
-Dockerfile Builder
-==================
+======================
+Dockerfiles for Images
+======================
 
 **Docker can act as a builder** and read instructions from a text
-Dockerfile to automate the steps you would otherwise make manually to
-create an image. Executing ``docker build`` will run your steps and
+``Dockerfile`` to automate the steps you would otherwise take manually
+to create an image. Executing ``docker build`` will run your steps and
 commit them along the way, giving you a final image.
 
 .. contents:: Table of Contents
@@ -35,6 +35,8 @@ build succeeds:
 Docker will run your steps one-by-one, committing the result if necessary,
 before finally outputting the ID of your new image.
 
+When you're done with your build, you're ready to look into :ref:`image_push`.
+
 2. Format
 =========
 
@@ -48,9 +50,9 @@ The Dockerfile format is quite simple:
 The Instruction is not case-sensitive, however convention is for them to be
 UPPERCASE in order to distinguish them from arguments more easily.
 
-Docker evaluates the instructions in a Dockerfile in order. **The first
-instruction must be `FROM`** in order to specify the base image from
-which you are building.
+Docker evaluates the instructions in a Dockerfile in order. **The
+first instruction must be `FROM`** in order to specify the
+:ref:`base_image_def` from which you are building.
 
 Docker will ignore **comment lines** *beginning* with ``#``. A comment
 marker anywhere in the rest of the line will be treated as an argument.
@@ -66,9 +68,15 @@ building images.
 
     ``FROM <image>``
 
+Or
+
+    ``FROM <image>:<tag>``
+
 The ``FROM`` instruction sets the :ref:`base_image_def` for subsequent
 instructions. As such, a valid Dockerfile must have ``FROM`` as its
-first instruction.
+first instruction. The image can be any valid image -- it is
+especially easy to start by **pulling an image** from the
+:ref:`using_public_repositories`.
 
 ``FROM`` must be the first non-comment instruction in the
 ``Dockerfile``.
@@ -76,6 +84,9 @@ first instruction.
 ``FROM`` can appear multiple times within a single Dockerfile in order
 to create multiple images. Simply make a note of the last image id
 output by the commit before each new ``FROM`` command.
+
+If no ``tag`` is given to the ``FROM`` instruction, ``latest`` is
+assumed. If the used tag does not exist, an error will be returned.
 
 3.2 MAINTAINER
 --------------
@@ -102,11 +113,50 @@ control.
 3.4 CMD
 -------
 
-    ``CMD <command>``
+CMD has three forms:
 
-The ``CMD`` instruction sets the command to be executed when running
-the image.  This is functionally equivalent to running ``docker commit
--run '{"Cmd": <command>}'`` outside the builder.
+* ``CMD ["executable","param1","param2"]`` (like an *exec*, preferred form)
+* ``CMD ["param1","param2"]`` (as *default parameters to ENTRYPOINT*)
+* ``CMD command param1 param2`` (as a *shell*)
+
+There can only be one CMD in a Dockerfile. If you list more than one
+CMD then only the last CMD will take effect.
+
+**The main purpose of a CMD is to provide defaults for an executing
+container.** These defaults can include an executable, or they can
+omit the executable, in which case you must specify an ENTRYPOINT as
+well.
+
+When used in the shell or exec formats, the ``CMD`` instruction sets
+the command to be executed when running the image.  This is
+functionally equivalent to running ``docker commit -run '{"Cmd":
+<command>}'`` outside the builder.
+
+If you use the *shell* form of the CMD, then the ``<command>`` will
+execute in ``/bin/sh -c``:
+
+.. code-block:: bash
+
+    FROM ubuntu
+    CMD echo "This is a test." | wc -
+
+If you want to **run your** ``<command>`` **without a shell** then you
+must express the command as a JSON array and give the full path to the
+executable. **This array form is the preferred format of CMD.** Any
+additional parameters must be individually expressed as strings in the
+array:
+
+.. code-block:: bash
+
+    FROM ubuntu
+    CMD ["/usr/bin/wc","--help"]
+
+If you would like your container to run the same executable every
+time, then you should consider using ``ENTRYPOINT`` in combination
+with ``CMD``. See :ref:`entrypoint_def`.
+
+If the user specifies arguments to ``docker run`` then they will
+override the default specified in CMD.
 
 .. note::
     Don't confuse ``RUN`` with ``CMD``. ``RUN`` actually runs a
@@ -121,7 +171,7 @@ the image.  This is functionally equivalent to running ``docker commit
 The ``EXPOSE`` instruction sets ports to be publicly exposed when
 running the image. This is functionally equivalent to running ``docker
 commit -run '{"PortSpecs": ["<port>", "<port2>"]}'`` outside the
-builder.
+builder. Take a look at :ref:`port_redirection` for more information.
 
 3.6 ENV
 -------
@@ -186,16 +236,55 @@ The copy obeys the following rules:
   directories in its path. All new files and directories are created
   with mode 0755, uid and gid 0.
 
+.. _entrypoint_def:
+
 3.8 ENTRYPOINT
 --------------
 
-    ``ENTRYPOINT ["/bin/echo"]``
+ENTRYPOINT has two forms:
 
-The ``ENTRYPOINT`` instruction adds an entry command that will not be
-overwritten when arguments are passed to docker run, unlike the
+* ``ENTRYPOINT ["executable", "param1", "param2"]`` (like an *exec*,
+  preferred form)
+* ``ENTRYPOINT command param1 param2`` (as a *shell*)
+
+There can only be one ``ENTRYPOINT`` in a Dockerfile. If you have more
+than one ``ENTRYPOINT``, then only the last one in the Dockerfile will
+have an effect.
+
+An ``ENTRYPOINT`` helps you to configure a container that you can run
+as an executable. That is, when you specify an ``ENTRYPOINT``, then
+the whole container runs as if it was just that executable.
+
+The ``ENTRYPOINT`` instruction adds an entry command that will **not**
+be overwritten when arguments are passed to ``docker run``, unlike the
 behavior of ``CMD``.  This allows arguments to be passed to the
-entrypoint.  i.e. ``docker run <image> -d`` will pass the "-d" argument
-to the entrypoint.
+entrypoint.  i.e. ``docker run <image> -d`` will pass the "-d"
+argument to the ENTRYPOINT.
+
+You can specify parameters either in the ENTRYPOINT JSON array (as in
+"like an exec" above), or by using a CMD statement. Parameters in the
+ENTRYPOINT will not be overridden by the ``docker run`` arguments, but
+parameters specified via CMD will be overridden by ``docker run``
+arguments.
+
+Like a ``CMD``, you can specify a plain string for the ENTRYPOINT and
+it will execute in ``/bin/sh -c``:
+
+.. code-block:: bash
+
+    FROM ubuntu
+    ENTRYPOINT wc -l -
+
+For example, that Dockerfile's image will *always* take stdin as input
+("-") and print the number of lines ("-l"). If you wanted to make
+this optional but default, you could use a CMD:
+
+.. code-block:: bash
+
+    FROM ubuntu
+    CMD ["-l", "-"]
+    ENTRYPOINT ["/usr/bin/wc"]
+
 
 3.9 VOLUME
 ----------

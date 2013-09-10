@@ -21,3 +21,5 @@ Contents:
    running_ssh_service
    couchdb_data_volumes
    postgresql_service
+   mongodb
+   running_riak_service
