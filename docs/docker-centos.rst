@@ -158,7 +158,7 @@ Congratulations! At this point you should have a working tsuru server running
 on your machine, follow the :doc:`tsuru client usage guide
 </apps/client/usage>` to start build your apps.
 
-
-If you want to add services - and see all the power of tsuru(like the bind command) - just use `crane <http://docs.tsuru.io/en/latest/services/usage.html>`_ 
-
+Adding Services
+===============
+Here you will find a complete step-by-step example of how to install a mysql service with tsuru: `http://docs.tsuru.io/en/latest/services/mysql-example.html <http://docs.tsuru.io/en/latest/services/mysql-example.html>`_
 

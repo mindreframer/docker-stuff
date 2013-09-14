@@ -183,6 +183,15 @@ func (c *container) setImage(imageId string) error {
 	return coll.UpdateId(c.ID, c)
 }
 
+func build(a provision.App, version string, w io.Writer) (string, error) {
+	imageID, err := deploy(a, version, w)
+	if err != nil {
+		return "", err
+	}
+	go Flatten(a)
+	return imageID, nil
+}
+
 func deploy(app provision.App, version string, w io.Writer) (string, error) {
 	commands, err := deployCmds(app, version)
 	if err != nil {
@@ -393,6 +402,11 @@ func getImage(app provision.App) string {
 
 // removeImage removes an image from docker registry
 func removeImage(imageId string) error {
+	removeFromRegistry(imageId)
+	return dockerCluster().RemoveImage(imageId)
+}
+
+func removeFromRegistry(imageId string) {
 	parts := strings.SplitN(imageId, "/", 3)
 	if len(parts) > 2 {
 		registryServer := parts[0]
@@ -403,7 +417,6 @@ func removeImage(imageId string) error {
 			http.DefaultClient.Do(request)
 		}
 	}
-	return dockerCluster().RemoveImage(imageId)
 }
 
 type cmdError struct {

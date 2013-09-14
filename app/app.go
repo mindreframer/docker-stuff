@@ -52,6 +52,8 @@ type App struct {
 	Owner    string
 	State    string
 	Deploys  uint
+
+	hr hookRunner
 }
 
 // MarshalJSON marshals the app in json format. It returns a JSON object with
@@ -532,7 +534,11 @@ func (app *App) run(cmd string, w io.Writer, once bool) error {
 
 // Restart runs the restart hook for the app, writing its output to w.
 func (app *App) Restart(w io.Writer) error {
-	err := log.Write(w, []byte("\n ---> Restarting your app\n"))
+	err := app.hookRunner().Restart(app, w, "before")
+	if err != nil {
+		return err
+	}
+	err = log.Write(w, []byte("\n ---> Restarting your app\n"))
 	if err != nil {
 		log.Printf("[restart] error on write app log for the app %s - %s", app.Name, err)
 		return err
@@ -542,7 +548,14 @@ func (app *App) Restart(w io.Writer) error {
 		log.Printf("[restart] error on restart the app %s - %s", app.Name, err)
 		return err
 	}
-	return nil
+	return app.hookRunner().Restart(app, w, "after")
+}
+
+func (app *App) hookRunner() hookRunner {
+	if app.hr == nil {
+		app.hr = &yamlHookRunner{}
+	}
+	return app.hr
 }
 
 func (app *App) Ready() error {
@@ -578,6 +591,10 @@ func (app *App) GetIp() string {
 // GetPlatform returns the platform of the app.
 func (app *App) GetPlatform() string {
 	return app.Platform
+}
+
+func (app *App) GetDeploys() uint {
+	return app.Deploys
 }
 
 // ProvisionedUnits returns the internal list of units converted to
