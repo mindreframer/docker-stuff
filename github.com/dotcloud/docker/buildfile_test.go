@@ -45,6 +45,34 @@ run    [ "$(ls -d /var/run/sshd)" = "/var/run/sshd" ]
 		nil,
 	},
 
+	// Exactly the same as above, except uses a line split with a \ to test
+	// multiline support.
+	{
+		`
+from   {IMAGE}
+run    sh -c 'echo root:testpass \
+	> /tmp/passwd'
+run    mkdir -p /var/run/sshd
+run    [ "$(cat /tmp/passwd)" = "root:testpass" ]
+run    [ "$(ls -d /var/run/sshd)" = "/var/run/sshd" ]
+`,
+		nil,
+		nil,
+	},
+
+	// Line containing literal "\n"
+	{
+		`
+from   {IMAGE}
+run    sh -c 'echo root:testpass > /tmp/passwd'
+run    echo "foo \n bar"; echo "baz"
+run    mkdir -p /var/run/sshd
+run    [ "$(cat /tmp/passwd)" = "root:testpass" ]
+run    [ "$(ls -d /var/run/sshd)" = "/var/run/sshd" ]
+`,
+		nil,
+		nil,
+	},
 	{
 		`
 from {IMAGE}
@@ -229,7 +257,7 @@ func buildImage(context testContextTemplate, t *testing.T, srv *Server, useCache
 	ip := srv.runtime.networkManager.bridgeNetwork.IP
 	dockerfile := constructDockerfile(context.dockerfile, ip, port)
 
-	buildfile := NewBuildFile(srv, ioutil.Discard, false, useCache)
+	buildfile := NewBuildFile(srv, ioutil.Discard, false, useCache, false)
 	id, err := buildfile.Build(mkTestContext(dockerfile, context.files, t))
 	if err != nil {
 		t.Fatal(err)
@@ -470,7 +498,7 @@ func TestForbiddenContextPath(t *testing.T) {
 	ip := srv.runtime.networkManager.bridgeNetwork.IP
 	dockerfile := constructDockerfile(context.dockerfile, ip, port)
 
-	buildfile := NewBuildFile(srv, ioutil.Discard, false, true)
+	buildfile := NewBuildFile(srv, ioutil.Discard, false, true, false)
 	_, err = buildfile.Build(mkTestContext(dockerfile, context.files, t))
 
 	if err == nil {
@@ -518,7 +546,7 @@ func TestBuildADDFileNotFound(t *testing.T) {
 	ip := srv.runtime.networkManager.bridgeNetwork.IP
 	dockerfile := constructDockerfile(context.dockerfile, ip, port)
 
-	buildfile := NewBuildFile(srv, ioutil.Discard, false, true)
+	buildfile := NewBuildFile(srv, ioutil.Discard, false, true, false)
 	_, err = buildfile.Build(mkTestContext(dockerfile, context.files, t))
 
 	if err == nil {
