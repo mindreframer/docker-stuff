@@ -17,6 +17,7 @@ https://github.com/fujin/dockerfiles.git
 https://github.com/georgebashi/docker-simpleregistry.git
 https://github.com/globocom/docker-cluster.git
 https://github.com/globocom/tsuru.git
+https://github.com/infoxchange/docker_dns.git
 https://github.com/jamescarr/puppet-docker-registry.git
 https://github.com/jpetazzo/dind.git
 https://github.com/jpetazzo/pipework.git
@@ -33,4 +34,3 @@ https://github.com/rainforestapp/Docker-Terminal.git
 https://github.com/shingara/dockerfiles.git
 https://github.com/swipely/docker-api.git
 https://github.com/toscanini/maestro.git
-https://github.com/infoxchange/docker_dns.git
