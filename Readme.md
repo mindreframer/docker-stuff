@@ -39,15 +39,15 @@ Articles:
 
     alphagov/gantry:
       Deployment automation for Docker
-       34 commits, last change: 2013-06-25 10:28:13, 6 stars, 2 forks
+       34 commits, last change: 2013-06-25 10:28:13, 5 stars, 2 forks
 
     andrewh/dockerfiles:
 
-       3 commits, last change: , 0 stars, 0 forks
+       7 commits, last change: , 0 stars, 0 forks
 
     aschmidt75/haproxy-docker-config:
       Configuring haproxy to automatically redirect to docker instances
-       26 commits, last change: 2013-07-16 08:37:06, 6 stars, 1 forks
+       26 commits, last change: 2013-07-16 08:37:06, 11 stars, 1 forks
 
     cmfatih/docker-vmi-builder:
       Docker VMI (Virtual Machine Image) Builder
@@ -55,7 +55,7 @@ Articles:
 
     crosbymichael/dockerui:
       A web interface for docker. http://docker.io
-       56 commits, last change: 2013-07-15 05:10:11, 236 stars, 19 forks
+       74 commits, last change: 2013-09-11 13:24:20, 996 stars, 44 forks
 
     cvlc/orchestrator:
       IPv6 Tethered Instances
@@ -63,55 +63,55 @@ Articles:
 
     dotcloud/docker-registry:
       Registry server for Docker (hosting/delivering of repositories and images)
-       140 commits, last change: 2013-08-19 17:49:34, 106 stars, 45 forks
+       234 commits, last change: 2013-09-20 08:46:23, 163 stars, 67 forks
 
     dotcloud/docker:
       Docker - the open-source application container engine
-       3,075 commits, last change: 2013-08-30 10:44:54, 5,313 stars, 556 forks
+       3,397 commits, last change: 2013-09-25 13:47:48, 6,123 stars, 688 forks
 
     dotcloud/dockerlite:
       Lightweight virtualization system based on LXC and BTRFS. See dotcloud/docker.
-       14 commits, last change: 2013-05-09 09:23:01, 331 stars, 21 forks
+       14 commits, last change: 2013-05-09 09:23:01, 337 stars, 22 forks
 
     dotcloud/openstack-docker:
       Nova driver and Glance backend to use Docker inside OpenStack
-       59 commits, last change: 2013-08-15 22:15:57, 154 stars, 10 forks
+       100 commits, last change: 2013-09-05 09:19:20, 183 stars, 16 forks
 
     dreid/docker-cookbook:
       A docker.io cookbook that can install docker, manage images, and try to set up an AUFS kernel.
-       4 commits, last change: 2013-07-24 23:14:35, 10 stars, 0 forks
+       4 commits, last change: , 10 stars, 0 forks
 
     dynport/docker-private-registry:
       Private docker registry implemented with golang
-       10 commits, last change: 2013-07-15 11:26:02, 12 stars, 2 forks
+       10 commits, last change: 2013-07-15 11:26:02, 15 stars, 3 forks
 
     dynport/dockland:
       Yet another docker web ui
-       6 commits, last change: 2013-06-17 03:22:43, 13 stars, 0 forks
+       6 commits, last change: 2013-06-17 03:22:43, 17 stars, 0 forks
 
     ehazlett/shipyard:
-      Docker web interface
-       69 commits, last change: 2013-08-08 22:02:57, 254 stars, 14 forks
+      Docker Management
+       146 commits, last change: 2013-09-22 18:21:03, 492 stars, 33 forks
 
     fsouza/go-dockerclient:
       HTTP client for the Docker remote API.
-       138 commits, last change: 2013-08-19 12:34:13, 3 stars, 2 forks
+       157 commits, last change: 2013-09-25 06:20:45, 9 stars, 5 forks
 
     fujin/dockerfiles:
       My collection (so far) of dockerfiles.
-       51 commits, last change: 2013-08-06 16:16:52, 1 stars, 0 forks
+       52 commits, last change: 2013-08-06 16:16:52, 2 stars, 0 forks
 
     georgebashi/docker-simpleregistry:
 
-       21 commits, last change: 2013-06-05 07:00:42, 0 stars, 0 forks
+       21 commits, last change: 2013-06-05 07:00:42, 1 stars, 0 forks
 
     globocom/docker-cluster:
       Cluster support for Docker, using the remote API.
-       109 commits, last change: 2013-08-20 10:49:05, 19 stars, 1 forks
+       117 commits, last change: 2013-09-25 07:56:53, 54 stars, 1 forks
 
     globocom/tsuru:
       Open source Platform as a Service.
-       5,805 commits, last change: 2013-08-29 13:27:14, 636 stars, 47 forks
+       5,940 commits, last change: 2013-09-25 18:14:23, 670 stars, 52 forks
 
     infoxchange/docker_dns:
       A simple DNS server to look up Docker containers
@@ -131,19 +131,19 @@ Articles:
 
     justone/docker-mongodb:
       Dockerized MongoDB (with SSHD)
-       3 commits, last change: 2013-06-12 21:32:17, 6 stars, 0 forks
+       3 commits, last change: 2013-06-12 21:32:17, 8 stars, 1 forks
 
     kencochrane/docker-tutorial:
       Docker Guidebook
-       33 commits, last change: 2013-07-29 07:31:20, 36 stars, 2 forks
+       35 commits, last change: 2013-08-23 10:43:44, 49 stars, 3 forks
 
     kstaken/dockerfile-examples:
       Some example dockerfiles for use with Docker
-       27 commits, last change: 2013-07-19 14:34:16, 6 stars, 2 forks
+       27 commits, last change: 2013-07-19 14:34:16, 21 stars, 9 forks
 
     kstaken/dockermix:
       Manage multi-container Docker environments - Development has moved to: https://github.com/toscanini/maestro
-       79 commits, last change: 2013-07-23 18:29:02, 24 stars, 0 forks
+       79 commits, last change: 2013-07-23 18:29:02, 25 stars, 0 forks
 
     paulczar/docker-wordpress:
       Demostrating dev workflow ... vagrant - docker - openstack
@@ -151,23 +151,23 @@ Articles:
 
     portertech/kitchen-docker:
       A Test Kitchen Driver for Docker
-       52 commits, last change: 2013-07-31 09:52:22, 34 stars, 8 forks
+       52 commits, last change: 2013-07-31 09:52:22, 39 stars, 9 forks
 
     progrium/buildstep:
       Buildstep uses Docker and Buildpacks to build applications like Heroku
-       96 commits, last change: 2013-08-21 08:35:45, 229 stars, 51 forks
+       107 commits, last change: 2013-09-25 21:41:30, 264 stars, 68 forks
 
     progrium/dokku:
       Docker powered mini-Heroku in less than 100 lines of Bash
-       273 commits, last change: 2013-08-19 12:22:18, 2,130 stars, 160 forks
+       285 commits, last change: 2013-09-09 19:17:03, 2,510 stars, 190 forks
 
     ptone/jiffylab:
       zero configuration Python/Unix web based teaching env
-       30 commits, last change: 2013-08-16 15:29:32, 51 stars, 4 forks
+       30 commits, last change: 2013-08-16 15:29:32, 61 stars, 5 forks
 
     rainforestapp/Docker-Terminal:
       A terminal for Docker containers in js. Note, this requires https://github.com/dotcloud/docker/pull/1146 - build docker with this, or wait for it to be included for more awesomeness!
-       7 commits, last change: 2013-07-11 15:43:43, 3 stars, 0 forks
+       7 commits, last change: , 7 stars, 0 forks
 
     shingara/dockerfiles:
       Some DockerFile I create
@@ -175,9 +175,9 @@ Articles:
 
     swipely/docker-api:
       A lightweight Ruby client for the Docker Remote API
-       148 commits, last change: 2013-08-09 08:41:14, 26 stars, 12 forks
+       173 commits, last change: 2013-09-18 08:59:11, 40 stars, 19 forks
 
     toscanini/maestro:
       Container orchestration for Docker environments
-       131 commits, last change: 2013-08-13 10:59:49, 149 stars, 1 forks
+       131 commits, last change: 2013-08-13 10:59:49, 205 stars, 5 forks
 <!-- PROJECTS_LIST_END -->
