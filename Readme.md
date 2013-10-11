@@ -67,7 +67,7 @@ Articles:
 
     dotcloud/docker:
       Docker - the open-source application container engine
-       3,397 commits, last change: 2013-09-25 13:47:48, 6,123 stars, 688 forks
+       3,467 commits, last change: 2013-10-04 09:29:56, 6,318 stars, 728 forks
 
     dotcloud/dockerlite:
       Lightweight virtualization system based on LXC and BTRFS. See dotcloud/docker.
@@ -111,7 +111,7 @@ Articles:
 
     globocom/tsuru:
       Open source Platform as a Service.
-       5,940 commits, last change: 2013-09-25 18:14:23, 670 stars, 52 forks
+       5,958 commits, last change: 2013-10-02 16:23:34, 681 stars, 52 forks
 
     infoxchange/docker_dns:
       A simple DNS server to look up Docker containers
