@@ -1,0 +1,172 @@
+#!/bin/bash
+
+command=$1
+config=$2
+config_file=containers/"$config".yml
+cidfile=cids/"$config".cid
+cidbootstrap=cids/"$config"_boostrap.cid
+local_discourse=local_discourse
+image=samsaffron/discourse
+docker_path=`which docker`
+
+usage () {
+  echo "Usage: launcher COMMAND CONFIG"
+  echo "Commands:"
+  echo "    start:      Start/initialize a container"
+  echo "    stop:       Stop a running container"
+  echo "    restart:    Restart a container"
+  echo "    destroy:    Stop and remove a container"
+  echo "    ssh:        Start a bash shell in a running container"
+  echo "    logs:       Docker logs for container"
+  echo "    bootstrap:  Bootstrap a container for the config based on a template"
+  exit 1
+}
+
+install_docker() {
+
+  echo "Docker is not installed, make sure you are running on the 3.8 kernel"
+  echo "The best supported Docker release is Ubuntu 12.04.03 for it run the following"
+  echo
+  echo "sudo apt-get update"
+  echo "sudo apt-get install linux-image-generic-lts-raring linux-headers-generic-lts-raring"
+  echo "sudo reboot"
+  echo
+
+  echo "sudo sh -c \"wget -qO- https://get.docker.io/gpg | apt-key add -\""
+  echo "sudo sh -c \"echo deb http://get.docker.io/ubuntu docker main > /etc/apt/sources.list.d/docker.list\""
+  echo "sudo apt-get update"
+  echo "sudo apt-get install lxc-docker"
+
+  exit 1
+}
+
+set_volumes() {
+  volumes=`cat $config_file | docker run -rm -i -a stdout -a stdin $image ruby -e \
+        "require 'yaml'; puts YAML.load(STDIN.readlines.join)['volumes'].map{|v| '-v ' << v['volume']['host'] << ':' << v['volume']['guest'] << ' '}.join"`
+}
+
+[ -z $docker_path ] && {
+  install_docker
+}
+
+
+[ $# -ne 2 ] && {
+  usage
+}
+
+if [ ! -e $config_file ]
+  then
+    echo "Config file was not found, ensure $config_file exists"
+    exit 1
+fi
+
+case "$command" in
+  bootstrap)
+
+      templates=`cat $config_file | docker run -rm -i -a stdin -a stdout $image ruby -e \
+        "require 'yaml'; puts YAML.load(STDIN.readlines.join)['templates']"`
+
+      arrTemplates=(${templates// / })
+      config_data=$(cat $config_file)
+      input="hack: true"
+
+      for template in "${arrTemplates[@]}"
+      do
+        [ ! -z $template ] && {
+          input="$input _FILE_SEPERATOR_ $(cat $template)"
+        }
+      done
+
+      # we always want our config file last so it takes priority
+      input="$input _FILE_SEPERATOR_ $config_data"
+
+      set_volumes
+
+      rm -f $cidbootstrap
+
+      (exec echo "$input" | docker run -cidfile $cidbootstrap -i -a stdin -a stdout -a stderr $volumes $image \
+         /bin/bash -c 'cd /pups && git pull && /pups/bin/pups --stdin') \
+         || (docker rm `cat $cidbootstrap` && rm $cidbootstrap)
+
+      [ ! -e $cidbootstrap ] && echo "FAILED TO BOOTSTRAP" && exit 1
+
+      sleep 5
+
+      docker commit `cat $cidbootstrap` $local_discourse/$config || echo 'FAILED TO COMMIT'
+      docker rm `cat $cidbootstrap` && rm $cidbootstrap
+
+      echo "Successfully bootstrappd, to starup use ./launcher start $config"
+      exit 0
+      ;;
+
+  ssh)
+      if [ ! -e $cidfile ]
+         then
+           echo "No cid found"
+           exit 1
+         else
+           cid="`cat $cidfile`"
+           address="`docker port $cid 22`"
+           split=(${address//:/ })
+           exec ssh root@${split[0]} -p ${split[1]}
+      fi
+      ;;
+
+  stop)
+      if [ ! -e $cidfile ]
+         then
+           echo "No cid found"
+           exit 1
+         else
+           docker stop -t 10 `cat $cidfile`
+           exit 0
+      fi
+      ;;
+
+  logs)
+
+      if [ ! -e $cidfile ]
+         then
+           echo "No cid found"
+           exit 1
+         else
+           docker logs `cat $cidfile`
+           exit 0
+      fi
+      ;;
+
+  start)
+
+      if [ ! -e $cidfile ]
+         then
+           echo "No cid found, creating a new container"
+           ports=`cat $config_file | docker run -rm -i -a stdout -a stdin $image ruby -e \
+                  "require 'yaml'; puts YAML.load(STDIN.readlines.join)['expose'].map{|p| '-p ' << p.to_s << ' '}.join"`
+
+           set_volumes
+
+           docker run -name $config -cidfile $cidfile $ports -d $volumes $local_discourse/$config /usr/bin/runsvdir -P /etc/service
+           exit 0
+         else
+           echo "cid found, ensuring container is started"
+           docker start `cat $cidfile`
+           exit 0
+      fi
+      ;;
+
+
+  destroy)
+      if [ -e $cidfile ]
+        then
+          echo "destroying container $cidfile"
+          docker stop -t 10 `cat $cidfile`
+          docker rm `cat $cidfile` && rm $cidfile
+          exit 0
+        else
+          echo "nothing to destroy cidfile does not exist"
+          exit 1
+      fi
+      ;;
+esac
+
+usage
