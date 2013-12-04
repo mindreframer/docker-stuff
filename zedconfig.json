@@ -1,0 +1,10 @@
+{
+    "modes": {
+        "python": {
+            "filenames": ["nix-docker"]
+        },
+        "ruby": {
+            "filenames": ["Vagrantfile"]
+        }
+    }
+}
