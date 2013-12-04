@@ -1,0 +1,25 @@
+params:
+  # SSH key is required for remote access into the container
+  # you may also use ssh-import-id
+  ssh_key: ""
+  # so ssh-import-id works
+
+env:
+  HOME: /root
+
+run:
+
+  - file:
+     path: /etc/service/sshd/run
+     chmod: "+x"
+     contents: |
+        #!/bin/sh
+        exec 2>&1
+        exec /usr/sbin/sshd -D -e
+
+  - exec:
+      hook: sshd
+      cmd:
+        - mkdir -p /var/run/sshd
+        - mkdir -p /root/.ssh
+        - echo $ssh_key >> /root/.ssh/authorized_keys
