@@ -31,8 +31,8 @@ https://github.com/progrium/buildstep.git
 https://github.com/progrium/dokku.git
 https://github.com/ptone/jiffylab.git
 https://github.com/rainforestapp/Docker-Terminal.git
+https://github.com/SamSaffron/discourse_docker.git
 https://github.com/shingara/dockerfiles.git
 https://github.com/swipely/docker-api.git
 https://github.com/toscanini/maestro.git
 https://github.com/zefhemel/nix-docker.git
-https://github.com/SamSaffron/discourse_docker.git
