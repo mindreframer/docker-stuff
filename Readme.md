@@ -55,7 +55,7 @@ Articles:
 
     crosbymichael/dockerui:
       A web interface for docker. http://docker.io
-       74 commits, last change: 2013-09-11 13:24:20, 996 stars, 44 forks
+       83 commits, last change: 2013-10-22 14:56:44, 1,084 stars, 55 forks
 
     cvlc/orchestrator:
       IPv6 Tethered Instances
@@ -67,7 +67,7 @@ Articles:
 
     dotcloud/docker:
       Docker - the open-source application container engine
-       3,467 commits, last change: 2013-10-04 09:29:56, 6,318 stars, 728 forks
+       4,171 commits, last change: 2013-11-20 16:30:48, 7,382 stars, 935 forks
 
     dotcloud/dockerlite:
       Lightweight virtualization system based on LXC and BTRFS. See dotcloud/docker.
@@ -111,7 +111,7 @@ Articles:
 
     globocom/tsuru:
       Open source Platform as a Service.
-       5,958 commits, last change: 2013-10-02 16:23:34, 681 stars, 52 forks
+       6,153 commits, last change: 2013-11-19 15:04:59, 730 stars, 59 forks
 
     infoxchange/docker_dns:
       A simple DNS server to look up Docker containers
@@ -169,6 +169,10 @@ Articles:
       A terminal for Docker containers in js. Note, this requires https://github.com/dotcloud/docker/pull/1146 - build docker with this, or wait for it to be included for more awesomeness!
        7 commits, last change: , 7 stars, 0 forks
 
+    SamSaffron/discourse_docker:
+      My work in progress docker image for Discourse
+       65 commits, last change: 2013-12-02 13:19:34, 10 stars, 1 forks
+
     shingara/dockerfiles:
       Some DockerFile I create
        4 commits, last change: , 1 stars, 0 forks
@@ -180,4 +184,8 @@ Articles:
     toscanini/maestro:
       Container orchestration for Docker environments
        131 commits, last change: 2013-08-13 10:59:49, 205 stars, 5 forks
+
+    zefhemel/nix-docker:
+      Provision Docker images using Nix
+       35 commits, last change: 2013-11-08 03:03:23, 22 stars, 1 forks
 <!-- PROJECTS_LIST_END -->
