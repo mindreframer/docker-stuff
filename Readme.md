@@ -61,13 +61,17 @@ Articles:
       Event-driven Docker with IPv6 tethered instances
        58 commits, last change: , 7 stars, 2 forks
 
+    dcm-oss/blockade:
+      Docker-based utility for testing network failures and partitions in distributed applications
+       22 commits, last change: 2014-02-14 10:12:13, 90 stars, 3 forks
+
     dotcloud/docker-registry:
       Registry server for Docker (hosting/delivering of repositories and images)
        405 commits, last change: 2014-01-02 17:33:35, 371 stars, 137 forks
 
     dotcloud/docker:
       Docker - the open-source application container engine
-       5,351 commits, last change: 2014-01-02 16:46:50, 8,658 stars, 1,230 forks
+       6,124 commits, last change: 2014-02-10 12:10:38, 9,657 stars, 1,448 forks
 
     dotcloud/dockerlite:
       Lightweight virtualization system based on LXC and BTRFS. See dotcloud/docker.
@@ -111,7 +115,7 @@ Articles:
 
     globocom/tsuru:
       Open source Platform as a Service.
-       6,389 commits, last change: 2013-12-19 19:43:37, 757 stars, 64 forks
+       6,555 commits, last change: 2014-02-10 12:15:05, 785 stars, 70 forks
 
     infoxchange/docker_dns:
       A simple DNS server to look up Docker containers
