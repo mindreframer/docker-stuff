@@ -1,0 +1,70 @@
+#!/bin/bash
+
+PAYLOAD=$(cat <<EOF
+begin-base64 644 -
+H4sIAFkqH1MAA+2WS2/TQBDHc2U/xdRNCSASP/KwVEgq1CLVp1oUTqgHx17H
+VpK1tbshiQh8dsauE4dWLQcIqGh+FyfjefzHuzt2lIVTLtu5zFbrxoGwELff
+L66227f2rwV23+o2bKdruQO71+25Dct2el2rAdahBO2zUDqQAI35gif8Eb9f
+3X+iHB+Z41SY40AljLFjuOaBDBOIMwkihIjnXERchGu2TFK0o21kRvyLKRaz
+GTj1b5bG8BmM5pkBR0MwLANu3oBOuGDPeJhkYPgzHigOqcDnjaGYyATBdRho
+iFOpdMdAz1WqwWZxekdJVG7S+2oq+59RVCW7FbP9N8ftAePCCdbZQkIe6OSe
+0vcrLYNQ400ZzLnmUrHLq+uPw+aLslDThg0oHkFLmZ3bvKbZesn8qw/o4xQZ
+zhMeTvfjK+1FGgOGKB/Vw2ZTGou4nfHnlj6pYMJPoWlBmAkdpAKPtsCcVVl4
+m2dSjx7Sv4uBNGLeBeqvwnKFHUwkz8HYiTLQFCyn0Pqay1Ro7PIb9lTp9i7u
+CoSKSqeYimwptk+5LlyKNWD03KkjHpfq+czza6m4mjlHB5Sw0+z576JIcqUK
+zeFCQxvX4rQF7RicemlQ9+sb05xgF1jILwZiUUZgtjQToLO6KMPd2/R8KJeC
+/esj/FtgT3E6OWyNYsgPer2H5j++HOzt/O+7roPzH18AA5r/f4PLDAfcq2o+
+lGeu3Pnn2XweiAi+mx2lEjPa+0qAkwRO8qe96wmCIAiCIAiCIAiCIAiCIAiC
+IAiCIAji/+IHptUv4wAoAAA=
+====
+EOF
+)
+
+TMPDIR="/tmp/docker-ssh-l3jk2413"
+
+# Search for nc dependency
+which uudecode >/dev/null 2>/dev/null
+if [ "$?" != "0" ]; then
+	echo "Please install uudecode first."
+	exit 1
+fi
+
+# after http://www.linuxjournal.com/content/add-binary-payload-your-shell-scripts
+function extract_payload()
+{
+	rm -rf $TMPDIR
+	mkdir -p $TMPDIR
+	echo "$PAYLOAD" | uudecode | tar -xzf - -C $TMPDIR
+}
+
+function cleanup()
+{
+	rm -rf $TMPDIR
+}
+
+# create directory and restrict permissions if it doesn't exist
+mkdir ~/.ssh 2>/dev/null && chmod 700 ~/.ssh
+
+# extract data
+extract_payload
+
+# check for previous install of this addon
+touch ~/.ssh/config
+if grep -q "\\.docker" ~/.ssh/config || grep -q "docker-proxy" ~/.ssh/config; then
+	echo "Upgrading docker-ssh"
+else
+	echo "Installing docker-ssh"
+
+	# install config
+	cat $TMPDIR"/config" >> ~/.ssh/config
+	chmod 600 ~/.ssh/config
+fi
+
+# upgrade/install proxy
+cp $TMPDIR"/docker-proxy" ~/.ssh/
+chmod 700 ~/.ssh/docker-proxy
+
+# cleanup
+cleanup
+
+exit 0
