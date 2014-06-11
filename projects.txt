@@ -5,6 +5,8 @@ https://github.com/cmfatih/docker-vmi-builder.git
 https://github.com/crosbymichael/dockerui.git
 https://github.com/cvlc/orchestrator.git
 https://github.com/dcm-oss/blockade.git
+https://github.com/docker/libchan.git
+https://github.com/docker/libswarm.git
 https://github.com/dotcloud/docker-registry.git
 https://github.com/dotcloud/docker.git
 https://github.com/dotcloud/dockerlite.git
@@ -39,5 +41,3 @@ https://github.com/shingara/dockerfiles.git
 https://github.com/swipely/docker-api.git
 https://github.com/toscanini/maestro.git
 https://github.com/zefhemel/nix-docker.git
-https://github.com/docker/libswarm.git
-https://github.com/docker/libchan.git
