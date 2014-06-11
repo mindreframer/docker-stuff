@@ -66,6 +66,14 @@
       Docker-based utility for testing network failures and partitions in distributed applications
        25 commits, last change: , 177 stars, 6 forks
 
+    docker/libchan:
+      Like Go channels over the network
+       28 commits, last change: , 650 stars, 18 forks
+
+    docker/libswarm:
+      A minimalist toolkit to compose network services
+       279 commits, last change: , 444 stars, 11 forks
+
     dotcloud/docker-registry:
       Registry server for Docker (hosting/delivering of repositories and images)
        664 commits, last change: , 714 stars, 248 forks
