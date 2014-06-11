@@ -39,3 +39,4 @@ https://github.com/shingara/dockerfiles.git
 https://github.com/swipely/docker-api.git
 https://github.com/toscanini/maestro.git
 https://github.com/zefhemel/nix-docker.git
+https://github.com/docker/libswarm.git
